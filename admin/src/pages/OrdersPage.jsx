@@ -333,8 +333,8 @@ export default function OrdersPage() {
 
       const matchesChannel =
         channelFilter === 'ALL' ||
-        (channelFilter === 'EKART' && (o.ekart?.ekartOrderId || o.shipway?.shipwayOrderId || o.courierPartner)) ||
-        (channelFilter === 'DIRECT' && !o.ekart?.ekartOrderId && !o.shipway?.shipwayOrderId)
+        (channelFilter === 'EKART' && (o.delhivery?.waybill || o.trackingNumber || o.courierPartner)) ||
+        (channelFilter === 'DIRECT' && !o.delhivery?.waybill && !o.trackingNumber)
 
       return matchesSearch && matchesStatus && matchesPayment && matchesChannel
     })
@@ -1726,7 +1726,7 @@ export default function OrdersPage() {
                 (selectedOrder.orderStatus === 'SHIPPED' ||
                   selectedOrder.orderStatus === 'IN_TRANSIT' ||
                   selectedOrder.orderStatus === 'DELIVERED') &&
-                Boolean(selectedOrder.trackingNumber || selectedOrder.shipway?.awbNumber)
+                Boolean(selectedOrder.trackingNumber || selectedOrder.delhivery?.waybill)
 
               return (
                 <div className="bg-white px-6 py-4 border-b border-slate-200 flex flex-col gap-3 shrink-0 print:hidden">

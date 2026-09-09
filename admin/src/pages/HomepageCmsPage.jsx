@@ -217,8 +217,8 @@ const DEFAULT_HOMEPAGE_CONFIG = {
       {
         id: 'val-4',
         iconName: 'Lock',
-        title: 'Secure Shipway Logistics',
-        desc: 'Fast express delivery, live tracking & reliable COD option',
+        title: 'Express Courier Delivery',
+        desc: 'Fast doorstep delivery, live tracking & reliable COD option',
       },
     ],
   },
