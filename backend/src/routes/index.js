@@ -14,6 +14,7 @@ import webhookRoutes from './webhook.routes.js'
 import analyticsRoutes from './analytics.routes.js'
 import siteSettingsRoutes from './siteSettings.routes.js'
 import couponRoutes from './coupon.routes.js'
+import returnRoutes from './return.routes.js'
 import { createPaymentOrder, verifyPayment } from '../controllers/payment.controller.js'
 import { optionalAuth } from '../middleware/auth.js'
 
@@ -25,6 +26,7 @@ router.use('/products', productRoutes)
 router.use('/categories', categoryRoutes)
 router.use('/cart', cartRoutes)
 router.use('/orders', orderRoutes)
+router.use('/returns', returnRoutes)
 router.use('/coupons', couponRoutes)
 router.use('/payment', paymentRoutes)
 router.post('/create-order', optionalAuth, createPaymentOrder)

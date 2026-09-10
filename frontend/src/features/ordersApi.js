@@ -107,6 +107,22 @@ export const ordersApi = api.injectEndpoints({
       query: () => '/shipping/settings',
       providesTags: ['ShippingSettings'],
     }),
+    createReturnRequest: builder.mutation({
+      query: (returnData) => ({
+        url: '/returns',
+        method: 'POST',
+        body: returnData,
+      }),
+      invalidatesTags: ['Order', 'Return'],
+    }),
+    getMyReturns: builder.query({
+      query: () => '/returns',
+      providesTags: ['Return'],
+    }),
+    getReturnById: builder.query({
+      query: (id) => `/returns/${id}`,
+      providesTags: (result, error, id) => [{ type: 'Return', id }],
+    }),
   }),
 })
 
@@ -130,4 +146,7 @@ export const {
   useUpdateOrderAddressMutation,
   useGetPublicInvoiceConfigQuery,
   useGetShippingSettingsQuery,
+  useCreateReturnRequestMutation,
+  useGetMyReturnsQuery,
+  useGetReturnByIdQuery,
 } = ordersApi

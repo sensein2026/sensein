@@ -83,8 +83,27 @@ const productSchema = new mongoose.Schema(
       type: String,
       default: '3305',
     },
+    reservedStock: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
+    isActive: {
+      type: Boolean,
+      default: true,
+      index: true,
+    },
+    isArchived: {
+      type: Boolean,
+      default: false,
+      index: true,
+    },
   },
   { timestamps: true }
 )
+
+productSchema.virtual('availableStock').get(function () {
+  return Math.max(0, (this.stock || 0) - (this.reservedStock || 0))
+})
 
 export default mongoose.model('Product', productSchema)

@@ -71,7 +71,10 @@ export const adminApi = api.injectEndpoints({
     }),
     // Orders
     getAdminOrders: builder.query({
-      query: () => '/admin/orders',
+      query: (params) => ({
+        url: '/admin/orders',
+        params,
+      }),
       providesTags: ['Order'],
     }),
     updateOrderStatus: builder.mutation({
@@ -89,6 +92,52 @@ export const adminApi = api.injectEndpoints({
         body,
       }),
       invalidatesTags: ['Order', 'Stats'],
+    }),
+    createOrderShipment: builder.mutation({
+      query: (id) => ({
+        url: `/admin/orders/${id}/shipment`,
+        method: 'POST',
+      }),
+      invalidatesTags: ['Order', 'Stats'],
+    }),
+    confirmCodCollection: builder.mutation({
+      query: ({ id, ...body }) => ({
+        url: `/admin/orders/${id}/collect-cod`,
+        method: 'POST',
+        body,
+      }),
+      invalidatesTags: ['Order', 'Stats'],
+    }),
+    processRefund: builder.mutation({
+      query: (body) => ({
+        url: '/payment/refund',
+        method: 'POST',
+        body,
+      }),
+      invalidatesTags: ['Order', 'Stats', 'Return'],
+    }),
+    getReturns: builder.query({
+      query: (params) => ({
+        url: '/returns',
+        params,
+      }),
+      providesTags: ['Return'],
+    }),
+    updateReturnStatus: builder.mutation({
+      query: ({ id, ...body }) => ({
+        url: `/returns/${id}/status`,
+        method: 'PUT',
+        body,
+      }),
+      invalidatesTags: ['Return', 'Order', 'Stats'],
+    }),
+    processReturnQC: builder.mutation({
+      query: ({ id, ...body }) => ({
+        url: `/returns/${id}/qc`,
+        method: 'POST',
+        body,
+      }),
+      invalidatesTags: ['Return', 'Order', 'Product', 'Stats'],
     }),
     // Users
     getAdminUsers: builder.query({
@@ -423,6 +472,12 @@ export const {
   useGetAdminOrdersQuery,
   useUpdateOrderStatusMutation,
   useUpdateOrderAddressMutation,
+  useCreateOrderShipmentMutation,
+  useConfirmCodCollectionMutation,
+  useProcessRefundMutation,
+  useGetReturnsQuery,
+  useUpdateReturnStatusMutation,
+  useProcessReturnQCMutation,
   useGetAdminUsersQuery,
   useUpdateUserRoleMutation,
   useGetHomepageContentQuery,

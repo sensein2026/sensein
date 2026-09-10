@@ -5,16 +5,16 @@ import {
   getOrderById,
   getOrderTrackingById,
   trackOrder,
-  updateOrderStatus,
   checkPincode,
   createRazorpayOrder,
   verifyRazorpaySignature,
   refundRazorpayPayment,
-  createReturnRequest,
   cancelUserOrder,
   updateOrderAddress,
 } from '../controllers/order.controller.js'
+import { createReturnRequest } from '../controllers/return.controller.js'
 import { verifyPayment } from '../controllers/payment.controller.js'
+import { updateOrderStatus } from '../controllers/admin.controller.js'
 import { protect, optionalAuth } from '../middleware/auth.js'
 
 const router = Router()

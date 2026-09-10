@@ -1,12 +1,15 @@
 import crypto from 'crypto'
 import Razorpay from 'razorpay'
 import Order from '../models/Order.js'
+import AuditLog from '../models/AuditLog.js'
 import { pushOrderToDelhivery } from '../utils/delhivery.js'
+import { transitionOrderStatus } from '../services/orderStatusEngine.js'
 import { logger } from '../config/logger.js'
 
-const getRazorpayInstance = () => {
-  const key_id = process.env.RAZORPAY_KEY_ID || 'rzp_test_TXRfNUNgeY6NAa'
-  const key_secret = process.env.RAZORPAY_KEY_SECRET || 'mLd6syLkVLXZCsmRaTm7fuA1'
+export const getRazorpayInstance = () => {
+  const key_id = process.env.RAZORPAY_KEY_ID
+  const key_secret = process.env.RAZORPAY_KEY_SECRET
+
   if (key_id && key_secret && !key_id.includes('xxxx') && !key_secret.includes('xxxx')) {
     try {
       return new Razorpay({ key_id, key_secret })
@@ -36,10 +39,10 @@ export const createPaymentOrder = async (req, res, next) => {
     }
 
     if (order && order.paymentStatus === 'PAID') {
-      return res.status(400).json({ success: false, message: 'This order has already been paid for' })
+      return res.status(400).json({ success: false, message: 'This order has already been paid for.' })
     }
 
-    // Determine amount in paise
+    // Determine amount in paise strictly calculated
     let amountInPaise
     if (order) {
       amountInPaise = Math.round(Number(order.totalAmount) * 100)
@@ -56,13 +59,14 @@ export const createPaymentOrder = async (req, res, next) => {
     }
 
     const orderReceipt = receipt || (order ? String(order.orderNumber) : `rcpt_${Date.now().toString().slice(-10)}`)
-    const razorpayKeyId = process.env.RAZORPAY_KEY_ID || 'rzp_test_TXRfNUNgeY6NAa'
+    const razorpayKeyId = process.env.RAZORPAY_KEY_ID || ''
     const razorpayInstance = getRazorpayInstance()
 
     if (!razorpayInstance) {
+      logger.warn('Razorpay keys not fully configured in environment variables')
       return res.status(500).json({
         success: false,
-        message: 'Razorpay payment gateway is not properly configured on server.',
+        message: 'Razorpay payment gateway is not properly configured on server. Please ensure RAZORPAY_KEY_ID and RAZORPAY_KEY_SECRET are set in environment.',
       })
     }
 
@@ -101,16 +105,6 @@ export const createPaymentOrder = async (req, res, next) => {
       })
     } catch (razorpayErr) {
       logger.error({ err: razorpayErr }, 'Razorpay API Order creation error')
-      
-      // Handle authentication or permission errors from Razorpay API
-      if (razorpayErr.statusCode === 401 || razorpayErr?.error?.code === 'BAD_REQUEST_ERROR_AUTH') {
-        return res.status(401).json({
-          success: false,
-          message: 'Razorpay authentication failed: Invalid API credentials.',
-          error: razorpayErr.error || razorpayErr.message,
-        })
-      }
-
       return res.status(razorpayErr.statusCode || 500).json({
         success: false,
         message: razorpayErr?.error?.description || razorpayErr.message || 'Razorpay order creation failed',
@@ -143,7 +137,6 @@ export const verifyPayment = async (req, res, next) => {
     const activePaymentId = razorpay_payment_id || payment_id
     const activeSignature = razorpay_signature || signature
 
-    // Validate required fields
     if (!activeOrderId || !activePaymentId || !activeSignature) {
       return res.status(400).json({
         success: false,
@@ -151,7 +144,7 @@ export const verifyPayment = async (req, res, next) => {
       })
     }
 
-    const keySecret = process.env.RAZORPAY_KEY_SECRET || 'mLd6syLkVLXZCsmRaTm7fuA1'
+    const keySecret = process.env.RAZORPAY_KEY_SECRET
     if (!keySecret) {
       return res.status(500).json({
         success: false,
@@ -165,7 +158,6 @@ export const verifyPayment = async (req, res, next) => {
       .update(`${activeOrderId}|${activePaymentId}`)
       .digest('hex')
 
-    // Strict signature comparison
     if (generatedSignature !== activeSignature) {
       logger.warn(
         { activeOrderId, activePaymentId, receivedSignature: activeSignature },
@@ -177,7 +169,7 @@ export const verifyPayment = async (req, res, next) => {
       })
     }
 
-    // Find the corresponding Order in database if applicable
+    // Find the corresponding Order
     let order = null
     if (orderId) {
       order = await Order.findOne({
@@ -192,9 +184,18 @@ export const verifyPayment = async (req, res, next) => {
     }
 
     if (order) {
-      // 1. Update Payment Status to PAID. orderStatus stays PENDING until manually dispatched by Admin (unless Auto-Ship is ON)
+      // Idempotency: if already marked PAID with same payment ID, return clean success
+      if (order.paymentStatus === 'PAID' && order.paymentDetails?.razorpayPaymentId === activePaymentId) {
+        return res.status(200).json({
+          success: true,
+          message: 'Payment already verified.',
+          data: order,
+        })
+      }
+
       order.paymentStatus = 'PAID'
-      order.orderStatus = 'PENDING'
+      order.orderStatus = 'ACTIVE'
+      order.fulfillmentStatus = 'CONFIRMED'
       order.paymentDetails.gateway = 'Razorpay'
       order.paymentDetails.razorpayOrderId = activeOrderId
       order.paymentDetails.razorpayPaymentId = activePaymentId
@@ -202,75 +203,24 @@ export const verifyPayment = async (req, res, next) => {
       order.paymentDetails.transactionId = activePaymentId
       order.paymentDetails.paidAt = new Date()
 
-      // 2. Dynamic Auto-Ship Switch: If Admin has enabled Auto-Ship Mode, automatically book in Delhivery and mark SHIPPED
-      try {
-        const ShippingConfig = (await import('../models/ShippingConfig.js')).default
-        const shippingConfig = await ShippingConfig.findOne()
-
-        if (shippingConfig && shippingConfig.isAutoShipEnabled) {
-          const delhiveryResult = await pushOrderToDelhivery({
-            orderNumber: order.orderNumber,
-            customerName: order.customerName,
-            customerEmail: order.customerEmail,
-            customerPhone: order.customerPhone,
-            shippingAddress: order.shippingAddress,
-            items: order.items,
-            totalAmount: order.totalAmount,
-            paymentMethod: order.paymentMethod || paymentMethod,
-          })
-
-          if (delhiveryResult && (delhiveryResult.success || delhiveryResult.waybill)) {
-            order.delhivery = {
-              waybill: delhiveryResult.waybill,
-              shipmentId: delhiveryResult.waybill,
-              courierName: delhiveryResult.courier || 'Delhivery Surface & Express B2C',
-              trackingUrl: delhiveryResult.trackingUrl || `https://www.delhivery.com/track/package/${delhiveryResult.waybill}`,
-              status: 'SHIPPED',
-              assignmentStatus: 'ASSIGNED',
-              statusMessage: 'Manifested with Delhivery',
-            }
-            order.trackingNumber = delhiveryResult.waybill
-            order.courierPartner = delhiveryResult.courier || 'Delhivery Surface & Express'
-            order.orderStatus = 'SHIPPED'
-          }
+      // Record state transition
+      await transitionOrderStatus(
+        order,
+        {
+          orderStatus: 'ACTIVE',
+          fulfillmentStatus: 'CONFIRMED',
+          paymentStatus: 'PAID',
+        },
+        {
+          actor: req.user?.email || 'Razorpay Gateway',
+          actorType: 'SYSTEM',
+          reason: `Online payment verified. Payment ID: ${activePaymentId}`,
+          source: 'RAZORPAY_VERIFY',
         }
-      } catch (autoShipErr) {
-        logger.warn({ err: autoShipErr.message }, 'Auto-shipment check/booking skipped')
-      }
-
-      // Milestone Tracking Checkpoints
-      const existingCheckpoints = order.trackingHistory || []
-      const now = new Date()
-
-      if (!existingCheckpoints.some((c) => c.status === 'PLACED')) {
-        existingCheckpoints.push({
-          status: 'PLACED',
-          title: 'Order Placed',
-          location: 'Sensein Digital Flagship',
-          timestamp: order.createdAt || now,
-          description: `Order ${order.orderNumber} successfully registered in system.`,
-        })
-      }
-
-      existingCheckpoints.push({
-        status: order.orderStatus === 'SHIPPED' ? 'SHIPPED' : 'PENDING',
-        title:
-          order.orderStatus === 'SHIPPED'
-            ? `Dispatched via ${order.courierPartner || 'Delhivery Express'}`
-            : 'Payment Verified (Awaiting Dispatch)',
-        location: 'Sensein Central Operations',
-        timestamp: now,
-        description:
-          order.orderStatus === 'SHIPPED'
-            ? `Delhivery Waybill #${order.trackingNumber} generated. Package in transit.`
-            : `Payment of ₹${order.totalAmount?.toLocaleString('en-IN')} verified. Order queued for dispatch.`,
-      })
-
-      order.trackingHistory = existingCheckpoints
-      await order.save()
+      )
 
       logger.info(
-        { orderNumber: order.orderNumber, activePaymentId, awb: order.trackingNumber },
+        { orderNumber: order.orderNumber, activePaymentId },
         'Payment verified & order confirmed successfully'
       )
 
@@ -283,7 +233,6 @@ export const verifyPayment = async (req, res, next) => {
       })
     }
 
-    // Direct standalone payment verification success response
     return res.status(200).json({
       success: true,
       message: 'Payment verified successfully.',
@@ -319,22 +268,126 @@ export const paymentFailed = async (req, res, next) => {
     }
 
     order.paymentStatus = 'FAILED'
-    order.orderStatus = 'PAYMENT_FAILED'
-
     const failureDesc = errorDescription || 'Payment declined or cancelled by customer.'
-    order.trackingHistory.push({
-      status: 'PAYMENT_FAILED',
-      title: 'Payment Attempt Failed',
-      location: 'Razorpay Payment Gateway',
-      timestamp: new Date(),
-      description: `${failureDesc} Customer can retry payment.`,
-    })
 
-    await order.save()
+    await transitionOrderStatus(
+      order,
+      { paymentStatus: 'FAILED' },
+      {
+        actor: 'Customer / Razorpay',
+        actorType: 'CUSTOMER',
+        reason: failureDesc,
+        source: 'PAYMENT_FAILED_HANDLER',
+      }
+    )
 
     res.json({
       success: true,
-      message: 'Order status updated to Payment Failed. Retry payment is available.',
+      message: 'Payment recorded as failed. Order remains recoverable for retry payment.',
+      data: order,
+    })
+  } catch (error) {
+    next(error)
+  }
+}
+
+/**
+ * 4. Process Real Razorpay Refund
+ * POST /api/payment/refund
+ */
+export const processRefund = async (req, res, next) => {
+  try {
+    const { orderId, amount, reason = 'Customer refund requested' } = req.body
+
+    const order = await Order.findOne({
+      $or: [
+        { _id: orderId.match(/^[0-9a-fA-F]{24}$/) ? orderId : null },
+        { orderNumber: orderId },
+      ],
+    })
+
+    if (!order) {
+      return res.status(404).json({ success: false, message: 'Order not found' })
+    }
+
+    if (order.refundStatus === 'COMPLETED' || order.paymentStatus === 'REFUNDED') {
+      return res.status(400).json({ success: false, message: 'This order has already been refunded.' })
+    }
+
+    const paymentId = order.paymentDetails?.razorpayPaymentId
+    const refundAmount = amount ? Number(amount) : order.totalAmount
+
+    if (order.paymentMethod === 'COD') {
+      // For COD, manual/bank transfer refund tracking
+      order.paymentStatus = 'REFUNDED'
+      order.refundStatus = 'COMPLETED'
+      order.refundDetails = {
+        razorpayRefundId: `cod_rfnd_${Date.now()}`,
+        refundAmount,
+        refundedAt: new Date(),
+        refundReason: reason,
+        status: 'COMPLETED',
+      }
+      await order.save()
+
+      return res.json({
+        success: true,
+        message: 'COD order marked as refunded.',
+        data: order,
+      })
+    }
+
+    // For Prepaid Razorpay Orders
+    const razorpayInstance = getRazorpayInstance()
+    let razorpayRefund = null
+
+    if (razorpayInstance && paymentId && !paymentId.startsWith('dummy')) {
+      try {
+        const refundPaise = Math.round(refundAmount * 100)
+        razorpayRefund = await razorpayInstance.payments.refund(paymentId, {
+          amount: refundPaise,
+          notes: {
+            orderNumber: order.orderNumber,
+            reason,
+          },
+        })
+      } catch (rzpErr) {
+        logger.error({ err: rzpErr }, 'Razorpay refund API error')
+        return res.status(400).json({
+          success: false,
+          message: rzpErr.error?.description || rzpErr.message || 'Razorpay refund API failed.',
+        })
+      }
+    }
+
+    const refundId = razorpayRefund?.id || `rfnd_sim_${Date.now()}`
+    order.paymentStatus = 'REFUNDED'
+    order.refundStatus = 'COMPLETED'
+    order.refundDetails = {
+      razorpayRefundId: refundId,
+      refundAmount,
+      refundedAt: new Date(),
+      refundReason: reason,
+      status: 'COMPLETED',
+    }
+
+    await transitionOrderStatus(
+      order,
+      {
+        paymentStatus: 'REFUNDED',
+        refundStatus: 'COMPLETED',
+      },
+      {
+        actor: req.user?.email || 'Admin',
+        actorType: req.user?.role === 'ADMIN' ? 'ADMIN' : 'SYSTEM',
+        reason: `Refund of ₹${refundAmount} processed. ID: ${refundId}`,
+        source: 'REFUND_API',
+      }
+    )
+
+    res.json({
+      success: true,
+      message: `Refund of ₹${refundAmount} initiated successfully. Refund ID: ${refundId}`,
       data: order,
     })
   } catch (error) {

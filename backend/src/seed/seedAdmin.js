@@ -7,25 +7,25 @@ async function seedAdmin() {
     await mongoose.connect(env.MONGODB_URI)
     console.log('🌱 Connected to MongoDB to seed Admin user...')
 
-    const adminEmail = 'admin@sensein.com'
+    const adminEmail = 'mindnextarticle@gmail.com'
     const existingAdmin = await User.findOne({ email: adminEmail })
 
     if (existingAdmin) {
       existingAdmin.role = 'admin'
       existingAdmin.isVerified = true
-      existingAdmin.password = 'AdminPassword123!'
+      existingAdmin.password = 'admin123'
       await existingAdmin.save()
-      console.log(`✅ Admin account updated & password reset: ${adminEmail} / AdminPassword123! (Role: admin)`)
+      console.log(`✅ Admin account updated & password reset: ${adminEmail} / admin123 (Role: admin)`)
     } else {
       const adminUser = new User({
         name: 'Lumière Administrator',
         email: adminEmail,
-        password: 'AdminPassword123!',
+        password: 'admin123',
         role: 'admin',
         isVerified: true,
       })
       await adminUser.save()
-      console.log(`✅ Created default Admin account: ${adminEmail} / AdminPassword123!`)
+      console.log(`✅ Created default Admin account: ${adminEmail} / admin123`)
     }
 
     process.exit(0)

@@ -13,6 +13,8 @@ import {
   getServiceAlert,
   updateServiceAlert,
   updateOrderStatus,
+  createOrderShipment,
+  confirmCodCollection,
   createProduct,
   updateProduct,
   deleteProduct,
@@ -77,6 +79,8 @@ router.get('/maintenance', getAdminSiteSettings)
 router.put('/maintenance', updateAdminSiteSettings)
 router.get('/orders', getAllOrders)
 router.put('/orders/:id/status', updateOrderStatus)
+router.post('/orders/:id/shipment', createOrderShipment)
+router.post('/orders/:id/collect-cod', confirmCodCollection)
 
 // Products Management
 router.post('/products', createProduct)

@@ -1,5 +1,6 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import { createPortal } from 'react-dom'
+import { useSearchParams } from 'react-router-dom'
 import {
   useGetAdminOrdersQuery,
   useUpdateOrderStatusMutation,
@@ -9,6 +10,12 @@ import {
   useSyncDelhiveryOrdersMutation,
   useGetDelhiveryConfigQuery,
   useGetServiceAlertQuery,
+  useCreateOrderShipmentMutation,
+  useConfirmCodCollectionMutation,
+  useProcessRefundMutation,
+  useGetReturnsQuery,
+  useUpdateReturnStatusMutation,
+  useProcessReturnQCMutation,
 } from '@/features/adminApi'
 import {
   ShoppingBag,
@@ -138,8 +145,17 @@ export default function OrdersPage() {
   const { data: delhiveryConfigData } = useGetDelhiveryConfigQuery()
   const [shippingOrderId, setShippingOrderId] = useState(null)
 
+  const [searchParams, setSearchParams] = useSearchParams()
+  const initialStatusParam = searchParams.get('status') || 'ALL'
   const [searchTerm, setSearchTerm] = useState('')
-  const [statusFilter, setStatusFilter] = useState('ALL')
+  const [statusFilter, setStatusFilter] = useState(initialStatusParam)
+
+  useEffect(() => {
+    const s = searchParams.get('status')
+    if (s) {
+      setStatusFilter(s)
+    }
+  }, [searchParams])
   const [feedbackMsg, setFeedbackMsg] = useState('')
   const [selectedOrder, setSelectedOrder] = useState(null)
   const [isInvoiceOpen, setIsInvoiceOpen] = useState(false)

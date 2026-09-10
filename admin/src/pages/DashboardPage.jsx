@@ -13,6 +13,10 @@ import {
   BarChart3,
   ArrowUpRight,
   Activity,
+  RotateCcw,
+  AlertCircle,
+  AlertTriangle,
+  Truck,
 } from 'lucide-react'
 import { Link } from 'react-router-dom'
 
@@ -63,7 +67,104 @@ export default function DashboardPage() {
     statsData?.totalUsers ??
     10
 
-  const recentOrdersList = rawOrders.slice(0, 6)
+  // Actionable Operations Counts
+  const needsPackingCount = rawOrders.filter(
+    (o) => ['CONFIRMED', 'PROCESSING'].includes(o.fulfillmentStatus) || o.orderStatus === 'CONFIRMED'
+  ).length
+
+  const readyForPickupCount = rawOrders.filter(
+    (o) => ['READY_FOR_PICKUP', 'SHIPMENT_CREATED', 'PACKED'].includes(o.fulfillmentStatus)
+  ).length
+
+  const inTransitCount = rawOrders.filter(
+    (o) => ['PICKED_UP', 'IN_TRANSIT', 'OUT_FOR_DELIVERY'].includes(o.fulfillmentStatus)
+  ).length
+
+  const returnsReviewCount = rawOrders.filter(
+    (o) => ['REQUESTED', 'UNDER_REVIEW'].includes(o.returnStatus)
+  ).length
+
+  const qcPendingCount = rawOrders.filter(
+    (o) => ['QC_PENDING', 'RECEIVED'].includes(o.returnStatus)
+  ).length
+
+  const refundsPendingCount = rawOrders.filter(
+    (o) => ['PENDING', 'PROCESSING'].includes(o.refundStatus) || o.paymentStatus === 'REFUND_PENDING'
+  ).length
+
+  const rtoCount = rawOrders.filter(
+    (o) => o.orderStatus === 'RTO' || (o.rtoStatus && o.rtoStatus !== 'NONE')
+  ).length
+
+  const codPendingCount = rawOrders.filter(
+    (o) => o.paymentMethod === 'COD' && o.codCollectionStatus === 'PENDING'
+  ).length
+
+  const actionCards = [
+    {
+      title: 'Needs Packing',
+      count: needsPackingCount,
+      subtext: 'Confirmed orders to pack',
+      color: 'bg-amber-500/10 text-amber-700 border-amber-300 hover:border-amber-400',
+      badgeColor: 'bg-amber-100 text-amber-800',
+      filter: 'PROCESSING',
+      icon: Package,
+    },
+    {
+      title: 'Ready for Courier',
+      count: readyForPickupCount,
+      subtext: 'Manifested / ready for pickup',
+      color: 'bg-blue-500/10 text-blue-700 border-blue-300 hover:border-blue-400',
+      badgeColor: 'bg-blue-100 text-blue-800',
+      filter: 'READY_FOR_PICKUP',
+      icon: Truck,
+    },
+    {
+      title: 'Returns to Review',
+      count: returnsReviewCount,
+      subtext: 'Customer return requests',
+      color: 'bg-purple-500/10 text-purple-700 border-purple-300 hover:border-purple-400',
+      badgeColor: 'bg-purple-100 text-purple-800',
+      filter: 'RETURN',
+      icon: RotateCcw,
+    },
+    {
+      title: 'QC Pending',
+      count: qcPendingCount,
+      subtext: 'Received items for inspection',
+      color: 'bg-indigo-500/10 text-indigo-700 border-indigo-300 hover:border-indigo-400',
+      badgeColor: 'bg-indigo-100 text-indigo-800',
+      filter: 'RETURN',
+      icon: AlertCircle,
+    },
+    {
+      title: 'Refunds Pending',
+      count: refundsPendingCount,
+      subtext: 'Awaiting Razorpay refund',
+      color: 'bg-rose-500/10 text-rose-700 border-rose-300 hover:border-rose-400',
+      badgeColor: 'bg-rose-100 text-rose-800',
+      filter: 'REFUND_PENDING',
+      icon: DollarSign,
+    },
+    {
+      title: 'RTO Deliveries',
+      count: rtoCount,
+      subtext: 'Returned to origin packages',
+      color: 'bg-orange-500/10 text-orange-700 border-orange-300 hover:border-orange-400',
+      badgeColor: 'bg-orange-100 text-orange-800',
+      filter: 'RTO',
+      icon: AlertTriangle,
+    },
+    {
+      title: 'COD Collections',
+      count: codPendingCount,
+      subtext: 'Doorstep cash verification',
+      color: 'bg-emerald-500/10 text-emerald-700 border-emerald-300 hover:border-emerald-400',
+      badgeColor: 'bg-emerald-100 text-emerald-800',
+      filter: 'COD',
+      icon: ShoppingBag,
+    },
+  ]
 
   // Top KPI Overview Cards
   const cards = [
@@ -243,6 +344,52 @@ export default function DashboardPage() {
             </div>
           )
         })}
+      </div>
+
+      {/* ACTION REQUIRED — Operational Task Queues */}
+      <div className="space-y-3">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <span className="flex h-2.5 w-2.5 rounded-full bg-amber-500 animate-ping" />
+            <h2 className="text-sm font-bold text-slate-900 uppercase tracking-wider font-mono">
+              Action Required &amp; Order Queues
+            </h2>
+          </div>
+          <Link
+            to="/orders"
+            className="text-xs font-semibold text-blue-600 hover:text-blue-700 flex items-center gap-1"
+          >
+            All Orders <ChevronRight className="h-3.5 w-3.5" />
+          </Link>
+        </div>
+
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-7 gap-3">
+          {actionCards.map((act, i) => {
+            const Icon = act.icon
+            return (
+              <Link
+                key={i}
+                to={`/orders?status=${act.filter}`}
+                className={`p-3.5 rounded-xl border transition-all hover:scale-[1.02] shadow-xs cursor-pointer flex flex-col justify-between ${act.color} bg-white`}
+              >
+                <div className="flex items-center justify-between mb-2">
+                  <span className={`px-2 py-0.5 rounded-md text-[10px] font-mono font-extrabold ${act.badgeColor}`}>
+                    {act.count}
+                  </span>
+                  <Icon className="h-4 w-4 opacity-70" />
+                </div>
+                <div>
+                  <div className="text-xs font-bold text-slate-900 leading-tight">
+                    {act.title}
+                  </div>
+                  <div className="text-[10px] text-slate-500 mt-0.5 truncate">
+                    {act.subtext}
+                  </div>
+                </div>
+              </Link>
+            )
+          })}
+        </div>
       </div>
 
       {/* Interactive Sales & Revenue Analytics Visualizer (Daily / Weekly / Monthly / Yearly) */}

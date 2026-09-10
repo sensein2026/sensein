@@ -32,6 +32,7 @@ import {
   useCancelUserOrderMutation,
   useUpdateOrderAddressMutation,
   useGetPublicInvoiceConfigQuery,
+  useCreateReturnRequestMutation,
 } from '@/features/ordersApi'
 import { useGetProductsQuery } from '@/features/productsApi'
 import {
@@ -90,6 +91,67 @@ export default function AccountPage() {
 
   const [updateProfile, { isLoading: isUpdatingProfile }] = useUpdateProfileMutation()
   const [updateOrderAddress, { isLoading: isUpdatingOrderAddress }] = useUpdateOrderAddressMutation()
+  const [createReturnRequest, { isLoading: isSubmittingReturn }] = useCreateReturnRequestMutation()
+
+  const [returnModalOrder, setReturnModalOrder] = useState(null)
+  const [returnForm, setReturnForm] = useState({
+    selectedItems: {}, // prodId -> { selected, quantity, reason, customerComment }
+    requestType: 'RETURN_REFUND',
+    evidenceMedia: [],
+    generalComment: '',
+  })
+
+  const handleOpenReturnModal = (order) => {
+    const initialItems = {}
+    ;(order.items || []).forEach((it) => {
+      const pId = it.product?._id || it.product || it._id
+      initialItems[pId] = {
+        product: it.product?._id || it.product || it._id,
+        name: it.name,
+        price: it.price,
+        image: it.image,
+        sku: it.sku,
+        quantity: it.quantity || 1,
+        selected: true,
+        reason: 'Damaged Product',
+        customerComment: '',
+      }
+    })
+    setReturnForm({
+      selectedItems: initialItems,
+      requestType: 'RETURN_REFUND',
+      evidenceMedia: [],
+      generalComment: '',
+    })
+    setReturnModalOrder(order)
+  }
+
+  const handleSubmitReturnRequest = async (e) => {
+    e.preventDefault()
+    if (!returnModalOrder) return
+
+    const itemsToReturn = Object.values(returnForm.selectedItems).filter((it) => it.selected)
+    if (itemsToReturn.length === 0) {
+      alert('Please select at least one item to return.')
+      return
+    }
+
+    try {
+      const res = await createReturnRequest({
+        orderId: returnModalOrder._id,
+        items: itemsToReturn,
+        requestType: returnForm.requestType,
+        evidenceMedia: returnForm.evidenceMedia,
+        customerComment: returnForm.generalComment,
+      }).unwrap()
+
+      alert(res?.message || 'Return / Replacement request submitted successfully!')
+      setReturnModalOrder(null)
+      refetchOrders()
+    } catch (err) {
+      alert(err?.data?.message || 'Failed to submit return request')
+    }
+  }
 
   const handleSaveOrderAddress = async (e) => {
     e.preventDefault()
@@ -897,6 +959,192 @@ export default function AccountPage() {
         </div>
       )}
 
+      {/* Return / Replacement Request Modal */}
+      {returnModalOrder && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 animate-in fade-in overflow-hidden">
+          <div className="bg-white rounded-2xl p-5 sm:p-7 max-w-lg w-full space-y-4 shadow-2xl relative my-8 border border-stone-200 max-h-[90dvh] overflow-y-auto">
+            <div className="flex justify-between items-center border-b border-stone-100 pb-3">
+              <div>
+                <h3 className="font-display text-base font-bold text-stone-900 flex items-center gap-2">
+                  <Package className="h-4 w-4 text-[#5A3859]" />
+                  <span>Request Return or Replacement</span>
+                </h3>
+                <p className="text-[11px] text-stone-500">
+                  Order #{returnModalOrder.orderNumber} • Delivered
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setReturnModalOrder(null)}
+                className="p-1 rounded-lg text-stone-400 hover:text-stone-700 hover:bg-stone-100 transition-colors cursor-pointer"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSubmitReturnRequest} className="space-y-4 text-xs">
+              {/* Type Selection: Refund vs Replacement */}
+              <div className="space-y-1.5">
+                <label className="text-[11px] font-bold text-stone-700 block uppercase tracking-wider">
+                  Select Resolution Type:
+                </label>
+                <div className="grid grid-cols-2 gap-2.5">
+                  <button
+                    type="button"
+                    onClick={() => setReturnForm({ ...returnForm, requestType: 'RETURN_REFUND' })}
+                    className={`p-3 rounded-xl border text-left cursor-pointer transition-all ${
+                      returnForm.requestType === 'RETURN_REFUND'
+                        ? 'border-[#5A3859] bg-[#5A3859]/5 ring-1 ring-[#5A3859]'
+                        : 'border-stone-200 hover:border-stone-300'
+                    }`}
+                  >
+                    <div className="font-bold text-stone-900">Return & Refund</div>
+                    <div className="text-[10px] text-stone-500">Refund back to original payment method</div>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setReturnForm({ ...returnForm, requestType: 'RETURN_REPLACEMENT' })}
+                    className={`p-3 rounded-xl border text-left cursor-pointer transition-all ${
+                      returnForm.requestType === 'RETURN_REPLACEMENT'
+                        ? 'border-[#5A3859] bg-[#5A3859]/5 ring-1 ring-[#5A3859]'
+                        : 'border-stone-200 hover:border-stone-300'
+                    }`}
+                  >
+                    <div className="font-bold text-stone-900">Free Replacement</div>
+                    <div className="text-[10px] text-stone-500">Receive a fresh replacement unit</div>
+                  </button>
+                </div>
+              </div>
+
+              {/* Items to return with reasons */}
+              <div className="space-y-2">
+                <label className="text-[11px] font-bold text-stone-700 block uppercase tracking-wider">
+                  Select Items & Reason:
+                </label>
+                <div className="divide-y divide-stone-100 border border-stone-200 rounded-xl overflow-hidden max-h-56 overflow-y-auto">
+                  {(returnModalOrder.items || []).map((it) => {
+                    const pId = it.product?._id || it.product || it._id
+                    const currentItemState = returnForm.selectedItems[pId] || {}
+                    return (
+                      <div key={pId} className="p-3 space-y-2 bg-stone-50/50">
+                        <div className="flex items-center justify-between gap-3">
+                          <label className="flex items-center gap-2.5 cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={Boolean(currentItemState.selected)}
+                              onChange={(e) => {
+                                setReturnForm({
+                                  ...returnForm,
+                                  selectedItems: {
+                                    ...returnForm.selectedItems,
+                                    [pId]: {
+                                      ...currentItemState,
+                                      selected: e.target.checked,
+                                    },
+                                  },
+                                })
+                              }}
+                              className="rounded border-stone-300 text-[#5A3859] focus:ring-[#5A3859]"
+                            />
+                            <span className="font-bold text-stone-900">{it.name}</span>
+                          </label>
+                          <span className="text-[11px] font-mono text-stone-600">
+                            Qty: {it.quantity} (₹{it.price})
+                          </span>
+                        </div>
+
+                        {currentItemState.selected && (
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">
+                            <div>
+                              <span className="text-[10px] text-stone-500 block mb-0.5 font-bold">Reason:</span>
+                              <select
+                                value={currentItemState.reason || 'Damaged Product'}
+                                onChange={(e) => {
+                                  setReturnForm({
+                                    ...returnForm,
+                                    selectedItems: {
+                                      ...returnForm.selectedItems,
+                                      [pId]: {
+                                        ...currentItemState,
+                                        reason: e.target.value,
+                                      },
+                                    },
+                                  })
+                                }}
+                                className="w-full p-1.5 rounded-lg border border-stone-300 bg-white text-xs"
+                              >
+                                <option value="Wrong Product">Wrong Product</option>
+                                <option value="Damaged Product">Damaged Product</option>
+                                <option value="Defective Product">Defective Product</option>
+                                <option value="Missing Item">Missing Item</option>
+                                <option value="Other">Other</option>
+                              </select>
+                            </div>
+                            <div>
+                              <span className="text-[10px] text-stone-500 block mb-0.5 font-bold">Notes / Description:</span>
+                              <input
+                                type="text"
+                                placeholder="Describe the issue"
+                                value={currentItemState.customerComment || ''}
+                                onChange={(e) => {
+                                  setReturnForm({
+                                    ...returnForm,
+                                    selectedItems: {
+                                      ...returnForm.selectedItems,
+                                      [pId]: {
+                                        ...currentItemState,
+                                        customerComment: e.target.value,
+                                      },
+                                    },
+                                  })
+                                }}
+                                className="w-full p-1.5 rounded-lg border border-stone-300 bg-white text-xs"
+                              />
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+
+              {/* General Comments & Evidence */}
+              <div className="space-y-1.5">
+                <label className="text-[11px] font-bold text-stone-700 block uppercase tracking-wider">
+                  Additional Evidence / Description:
+                </label>
+                <textarea
+                  rows={2}
+                  placeholder="Provide any additional comments for QC verification"
+                  value={returnForm.generalComment}
+                  onChange={(e) => setReturnForm({ ...returnForm, generalComment: e.target.value })}
+                  className="w-full p-2 rounded-lg border border-stone-300 bg-white text-xs resize-none"
+                />
+              </div>
+
+              <div className="pt-3 border-t border-stone-100 flex items-center justify-end gap-2.5">
+                <button
+                  type="button"
+                  onClick={() => setReturnModalOrder(null)}
+                  className="px-3.5 py-2 border border-stone-300 text-stone-700 hover:bg-stone-50 rounded-lg text-xs font-semibold cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSubmittingReturn}
+                  className="bg-[#5A3859] hover:bg-[#482b47] text-white text-xs font-bold px-5 py-2 rounded-lg flex items-center gap-1.5 shadow-2xs transition-all cursor-pointer disabled:opacity-50"
+                >
+                  <span>{isSubmittingReturn ? 'Submitting...' : 'Submit Request'}</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
       {/* Edit Delivery Address Modal */}
       {editingAddr && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 animate-in fade-in">
@@ -1470,26 +1718,39 @@ export default function AccountPage() {
                           {order.paymentStatus === 'PAID' && <CheckCircle2 className="h-3 w-3 text-emerald-600" />}
                           {order.paymentStatus === 'FAILED' && <XCircle className="h-3 w-3 text-rose-600" />}
                           {order.paymentStatus === 'PENDING' && <Clock className="h-3 w-3 text-amber-600" />}
-                          <span>{order.paymentStatus === 'PAID' ? 'Paid' : order.paymentStatus === 'FAILED' ? 'Failed' : 'Pending'}</span>
+                          <span>{order.paymentStatus === 'PAID' ? 'Paid' : order.paymentStatus === 'FAILED' ? 'Failed' : 'Payment Pending'}</span>
                         </span>
 
                         {/* Fulfillment Status Badge */}
                         <span
                           className={`text-[9px] sm:text-[10px] uppercase font-extrabold tracking-wider px-2 py-0.5 rounded border flex items-center gap-1 ${
-                            order.orderStatus === 'DELIVERED'
+                            (order.fulfillmentStatus || order.orderStatus) === 'DELIVERED'
                               ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
-                              : order.orderStatus === 'SHIPPED' || order.orderStatus === 'IN_TRANSIT'
+                              : ['PICKED_UP', 'IN_TRANSIT', 'OUT_FOR_DELIVERY'].includes(order.fulfillmentStatus || order.orderStatus)
                               ? 'bg-blue-50 text-blue-700 border-blue-200'
-                              : order.orderStatus === 'PAYMENT_FAILED'
+                              : (order.fulfillmentStatus || order.orderStatus) === 'CANCELLED'
                               ? 'bg-rose-50 text-rose-700 border-rose-200'
                               : 'bg-stone-100 text-stone-700 border-stone-300'
                           }`}
                         >
-                          {order.orderStatus === 'DELIVERED' && <CheckCircle2 className="h-3 w-3 text-emerald-600" />}
-                          {(order.orderStatus === 'SHIPPED' || order.orderStatus === 'IN_TRANSIT') && <Truck className="h-3 w-3 text-blue-600" />}
-                          {order.orderStatus === 'PAYMENT_FAILED' && <XCircle className="h-3 w-3 text-rose-600" />}
-                          <span>{order.orderStatus}</span>
+                          {(order.fulfillmentStatus || order.orderStatus) === 'DELIVERED' && <CheckCircle2 className="h-3 w-3 text-emerald-600" />}
+                          {['PICKED_UP', 'IN_TRANSIT', 'OUT_FOR_DELIVERY'].includes(order.fulfillmentStatus || order.orderStatus) && <Truck className="h-3 w-3 text-blue-600" />}
+                          {(order.fulfillmentStatus || order.orderStatus) === 'CANCELLED' && <XCircle className="h-3 w-3 text-rose-600" />}
+                          <span>{order.fulfillmentStatus || order.orderStatus}</span>
                         </span>
+
+                        {/* Return / Replacement Status Badge (if active) */}
+                        {order.returnStatus && order.returnStatus !== 'NONE' && (
+                          <span className="text-[9px] sm:text-[10px] uppercase font-extrabold tracking-wider px-2 py-0.5 rounded bg-purple-50 text-purple-700 border border-purple-200">
+                            Return: {order.returnStatus}
+                          </span>
+                        )}
+
+                        {order.replacementStatus && order.replacementStatus !== 'NONE' && (
+                          <span className="text-[9px] sm:text-[10px] uppercase font-extrabold tracking-wider px-2 py-0.5 rounded bg-indigo-50 text-indigo-700 border border-indigo-200">
+                            Replacement: {order.replacementStatus}
+                          </span>
+                        )}
                       </div>
 
                       <div className="text-[11px] text-stone-500 flex items-center gap-1.5 font-medium">
@@ -1510,7 +1771,7 @@ export default function AccountPage() {
                       </div>
                     </div>
 
-                    {/* Action Buttons (Clean & Responsive: View Order + Download Invoice) */}
+                    {/* Action Buttons (Clean, Contextual & Responsive) */}
                     <div className="flex flex-wrap items-center gap-2 pt-1 sm:pt-0">
                       {order.paymentStatus === 'FAILED' || order.orderStatus === 'PAYMENT_FAILED' ? (
                         <button
@@ -1523,10 +1784,72 @@ export default function AccountPage() {
                         </button>
                       ) : null}
 
+                      {/* Track Order Button */}
+                      {order.orderStatus !== 'CANCELLED' && (
+                        <Link
+                          to={`/track-order?number=${encodeURIComponent(order.orderNumber)}`}
+                          className="bg-stone-100 hover:bg-stone-200 text-stone-800 text-xs font-bold uppercase px-3 py-1.5 rounded-lg border border-stone-300 transition-all flex items-center justify-center gap-1.5 cursor-pointer shadow-2xs"
+                        >
+                          <Truck className="h-3.5 w-3.5 text-blue-600" />
+                          <span>Track Order</span>
+                        </Link>
+                      )}
+
+                      {/* Edit Address (Before Physical Courier Pickup) */}
+                      {!['PICKED_UP', 'IN_TRANSIT', 'OUT_FOR_DELIVERY', 'DELIVERED', 'CANCELLED', 'RETURNED', 'RTO'].includes(
+                        order.fulfillmentStatus || order.orderStatus
+                      ) && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setEditingOrderAddress(order)
+                            setOrderAddressForm({
+                              customerName: order.customerName || order.shippingAddress?.fullName || '',
+                              customerPhone: order.customerPhone || order.shippingAddress?.phone || '',
+                              addressLine: order.shippingAddress?.addressLine || '',
+                              city: order.shippingAddress?.city || '',
+                              state: order.shippingAddress?.state || '',
+                              postalCode: order.shippingAddress?.postalCode || '',
+                            })
+                          }}
+                          className="bg-stone-50 hover:bg-stone-100 text-stone-700 text-xs font-bold uppercase px-3 py-1.5 rounded-lg border border-stone-200 transition-all flex items-center justify-center gap-1.5 cursor-pointer shadow-2xs"
+                        >
+                          <Edit2 className="h-3.5 w-3.5 text-[#5A3859]" />
+                          <span>Edit Address</span>
+                        </button>
+                      )}
+
+                      {/* Pre-Pickup Cancellation Button */}
+                      {!['PICKED_UP', 'IN_TRANSIT', 'OUT_FOR_DELIVERY', 'DELIVERED', 'CANCELLED', 'RETURNED', 'RTO', 'PAYMENT_FAILED'].includes(
+                        order.fulfillmentStatus || order.orderStatus
+                      ) && (
+                        <button
+                          type="button"
+                          onClick={() => handleCancelOrder(order._id, order.orderNumber)}
+                          disabled={isCancellingOrder}
+                          className="bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 text-xs font-bold uppercase px-3 py-1.5 rounded-lg transition-all flex items-center justify-center gap-1.5 cursor-pointer shadow-2xs"
+                        >
+                          <XCircle className="h-3.5 w-3.5 text-rose-600" />
+                          <span>Cancel Order</span>
+                        </button>
+                      )}
+
+                      {/* Return / Replacement Button on Delivered Orders */}
+                      {(order.fulfillmentStatus === 'DELIVERED' || order.orderStatus === 'DELIVERED') && (!order.returnStatus || order.returnStatus === 'NONE') && (
+                        <button
+                          type="button"
+                          onClick={() => handleOpenReturnModal(order)}
+                          className="bg-purple-50 hover:bg-purple-100 text-purple-700 border border-purple-200 text-xs font-bold uppercase px-3 py-1.5 rounded-lg transition-all flex items-center justify-center gap-1.5 cursor-pointer shadow-2xs"
+                        >
+                          <Package className="h-3.5 w-3.5 text-purple-600" />
+                          <span>Return / Replace</span>
+                        </button>
+                      )}
+
                       <button
                         type="button"
                         onClick={() => setSelectedOrderModal(order)}
-                        className="bg-white hover:bg-[#5A3859]/5 text-stone-800 hover:text-[#5A3859] text-xs font-bold uppercase px-3.5 py-1.5 rounded-lg border border-stone-300 hover:border-[#5A3859] transition-all flex items-center justify-center gap-1.5 cursor-pointer shadow-2xs"
+                        className="bg-white hover:bg-[#5A3859]/5 text-stone-800 hover:text-[#5A3859] text-xs font-bold uppercase px-3 py-1.5 rounded-lg border border-stone-300 hover:border-[#5A3859] transition-all flex items-center justify-center gap-1.5 cursor-pointer shadow-2xs"
                       >
                         <FileText className="h-3.5 w-3.5 text-[#5A3859]" />
                         <span>View Order</span>

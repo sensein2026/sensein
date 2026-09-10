@@ -9,7 +9,13 @@ import {
   useSyncDelhiveryOrdersMutation,
   useGetDelhiveryConfigQuery,
   useGetServiceAlertQuery,
-} from '@/features/adminApi'
+  useCreateOrderShipmentMutation,
+  useConfirmCodCollectionMutation,
+  useProcessRefundMutation,
+  useGetReturnsQuery,
+  useUpdateReturnStatusMutation,
+  useProcessReturnQCMutation,
+} from '@/admin-suite/features/adminApi'
 import {
   ShoppingBag,
   Loader2,

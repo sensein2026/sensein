@@ -13,7 +13,7 @@ import { logger } from '../config/logger.js'
  */
 
 export const DELHIVERY_CONFIG = {
-  apiToken: process.env.DELHIVERY_API_TOKEN || '49b6d9192734e12502837220d02b3ed72475b036',
+  apiToken: process.env.DELHIVERY_API_TOKEN || '',
   clientId: process.env.DELHIVERY_CLIENT_ID || 'MINDNEXT_B2C',
   isLiveMode: process.env.DELHIVERY_LIVE_MODE !== 'false',
   stagingUrl: 'https://staging-express.delhivery.com',

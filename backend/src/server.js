@@ -3,9 +3,11 @@ import { env } from './config/env.js'
 import { logger } from './config/logger.js'
 import { connectDB } from './config/db.js'
 import { initDailyScheduler } from './services/dailyReportService.js'
+import { runIdempotentMigration } from './utils/dbMigration.js'
 
 async function start() {
   await connectDB()
+  await runIdempotentMigration()
   initDailyScheduler()
 
   const server = app.listen(env.PORT, () => {
