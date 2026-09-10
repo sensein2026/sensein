@@ -18,6 +18,9 @@ export const sendEmail = async ({ to, subject, html, text, attachments }) => {
         host: env.EMAIL_HOST,
         port: env.EMAIL_PORT || 587,
         secure: env.EMAIL_PORT === 465,
+        connectionTimeout: 5000,
+        greetingTimeout: 5000,
+        socketTimeout: 8000,
         auth: {
           user: env.EMAIL_USER,
           pass: env.EMAIL_PASSWORD,
@@ -25,16 +28,25 @@ export const sendEmail = async ({ to, subject, html, text, attachments }) => {
       })
     } else {
       // Fallback Ethereal / Local Test Transport for seamless local development
-      const testAccount = await nodemailer.createTestAccount()
-      transporter = nodemailer.createTransport({
-        host: 'smtp.ethereal.email',
-        port: 587,
-        secure: false,
-        auth: {
-          user: testAccount.user,
-          pass: testAccount.pass,
-        },
-      })
+      try {
+        const testAccount = await Promise.race([
+          nodemailer.createTestAccount(),
+          new Promise((_, reject) => setTimeout(() => reject(new Error('Ethereal timeout')), 4000)),
+        ])
+        transporter = nodemailer.createTransport({
+          host: 'smtp.ethereal.email',
+          port: 587,
+          secure: false,
+          connectionTimeout: 4000,
+          auth: {
+            user: testAccount.user,
+            pass: testAccount.pass,
+          },
+        })
+      } catch (e) {
+        logger.warn('⚠️ SMTP not configured and Ethereal unavailable. Email delivery skipped.')
+        return { messageId: 'skipped' }
+      }
     }
 
     const info = await transporter.sendMail({
