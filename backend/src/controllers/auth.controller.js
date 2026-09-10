@@ -238,6 +238,8 @@ export const quickEmailLogin = async (req, res, next) => {
 
     console.log('🔑 [SENSEIN AUTH OTP GENERATED]:', cleanEmail, '->', otpCode)
 
+    const emailContent = buildSimpleOtpEmail({ otpCode })
+
     // Asynchronously dispatch email without blocking fast OTP modal UI
     sendEmail({
       to: cleanEmail,
