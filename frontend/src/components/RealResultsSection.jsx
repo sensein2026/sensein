@@ -458,11 +458,19 @@ export default function RealResultsSection({ config }) {
                     {/* Active Reel Live UI Overlay */}
                     {isCenter && (
                       <div className="absolute inset-x-0 bottom-0 z-20 p-3 sm:p-4 bg-gradient-to-t from-black/95 via-black/70 to-transparent text-left space-y-1.5 sm:space-y-2 pt-8 sm:pt-12 pointer-events-auto">
-                        <div className="flex items-center justify-between">
-                          <span className="inline-block px-1.5 py-0.2 sm:px-2 sm:py-0.5 rounded bg-[#5A3859] text-white text-[8px] sm:text-[9px] font-bold uppercase tracking-wider">
-                            {card.tag}
-                          </span>
-                          <span className="text-[10px] sm:text-[11px] font-bold text-amber-300 flex items-center gap-0.5">
+                        <div className="flex items-center justify-between gap-2">
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            {card.showBestsellerTag !== false && (card.isBestseller || (card.tag && card.tag.toUpperCase() === 'BESTSELLER')) ? (
+                              <span className="inline-block px-2 py-0.5 rounded bg-amber-400 text-stone-950 text-[8px] sm:text-[9px] font-black uppercase tracking-wider shadow-xs">
+                                ★ BESTSELLER
+                              </span>
+                            ) : card.tag ? (
+                              <span className="inline-block px-1.5 py-0.5 rounded bg-[#5A3859] text-white text-[8px] sm:text-[9px] font-bold uppercase tracking-wider">
+                                {card.tag}
+                              </span>
+                            ) : null}
+                          </div>
+                          <span className="text-[10px] sm:text-[11px] font-bold text-amber-300 flex items-center gap-0.5 shrink-0">
                             <Star className="w-2.5 h-2.5 sm:w-3 sm:h-3 fill-amber-300" />
                             {card.rating}
                           </span>

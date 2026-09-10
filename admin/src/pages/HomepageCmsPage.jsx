@@ -1014,6 +1014,63 @@ export default function HomepageCmsPage() {
                 </button>
               </div>
 
+              {/* Global Carousel Slide Duration Settings */}
+              <div className="p-4 bg-slate-50 border border-slate-200 rounded-xl flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <div>
+                  <label className="text-xs font-bold text-slate-800 flex items-center gap-2 uppercase tracking-wide">
+                    <Sliders className="h-4 w-4 text-blue-600" />
+                    <span>Auto Slide Switch Timer / Duration (સ્લાઇડ બદલાવાનો સમય)</span>
+                  </label>
+                  <p className="text-[11px] text-slate-500 mt-0.5">
+                    સ્લાઇડ કે વિડીયો કેટલી સેકન્ડ પછી આપમેળે આગળ વધશે તે નક્કી કરો (ગ્રાહક એરો કે ડોટ્સથી જાતે પણ ફેરવી શકે છે).
+                  </p>
+                </div>
+                <div className="flex items-center gap-2">
+                  {[3, 5, 6, 8, 10].map((sec) => (
+                    <button
+                      key={sec}
+                      type="button"
+                      onClick={() =>
+                        setFormData((prev) => ({
+                          ...prev,
+                          heroSlider: {
+                            ...(prev.heroSlider || {}),
+                            slideDuration: sec,
+                          },
+                        }))
+                      }
+                      className={`px-3 py-1.5 rounded-lg text-xs font-bold font-mono transition-all cursor-pointer ${
+                        (formData.heroSlider?.slideDuration || 6) === sec
+                          ? 'bg-blue-600 text-white shadow-xs'
+                          : 'bg-white border border-slate-200 text-slate-700 hover:bg-slate-100'
+                      }`}
+                    >
+                      {sec}s
+                    </button>
+                  ))}
+                  <div className="flex items-center gap-1 bg-white border border-slate-200 rounded-lg px-2 py-1">
+                    <input
+                      type="number"
+                      min={2}
+                      max={30}
+                      value={formData.heroSlider?.slideDuration || 6}
+                      onChange={(e) => {
+                        const val = Math.max(2, Math.min(30, Number(e.target.value) || 6))
+                        setFormData((prev) => ({
+                          ...prev,
+                          heroSlider: {
+                            ...(prev.heroSlider || {}),
+                            slideDuration: val,
+                          },
+                        }))
+                      }}
+                      className="w-12 text-xs font-mono font-bold text-slate-900 text-center focus:outline-none"
+                    />
+                    <span className="text-[10px] text-slate-400 font-bold">sec</span>
+                  </div>
+                </div>
+              </div>
+
               <div className="space-y-6">
                 {(formData.heroSlider?.slides || []).map((slide, index) => {
                   const updateSlideField = (field, val) => {
@@ -1961,6 +2018,57 @@ export default function HomepageCmsPage() {
                 </div>
               </div>
 
+              {/* Section Bottom CTA Button Settings */}
+              <div className="p-4 bg-purple-50/50 border border-purple-200 rounded-xl space-y-3">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <span className="text-xs font-bold text-purple-900 uppercase tracking-wider flex items-center gap-1.5">
+                      <Star className="h-3.5 w-3.5 text-amber-500 fill-amber-500" />
+                      Section Bottom CTA Button (રીલ્સ નીચેનું બટન &amp; બેસ્ટસેલર ફિલ્ટર)
+                    </span>
+                    <p className="text-[11px] text-purple-700/80 mt-0.5">
+                      આ બટન પર ક્લિક કરવાથી ગ્રાહક સીધા શોપ પેજ પર બેસ્ટસેલર ફિલ્ટર થયેલા પ્રોડક્ટ્સ પર પહોંચશે.
+                    </p>
+                  </div>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                      Button Text (બટન લખાણ)
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="e.g. Shop All Bestsellers"
+                      value={formData.realResults?.buttonText || 'Shop All Bestsellers'}
+                      onChange={(e) =>
+                        setFormData({
+                          ...formData,
+                          realResults: { ...formData.realResults, buttonText: e.target.value },
+                        })
+                      }
+                      className="w-full bg-white border border-slate-200 text-slate-900 text-xs rounded-xl px-3.5 py-2 font-bold focus:border-purple-600 focus:outline-none"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                      Button Target Link (લિંક - By default: /shop?filter=bestseller)
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="/shop?filter=bestseller"
+                      value={formData.realResults?.buttonLink || '/shop?filter=bestseller'}
+                      onChange={(e) =>
+                        setFormData({
+                          ...formData,
+                          realResults: { ...formData.realResults, buttonLink: e.target.value },
+                        })
+                      }
+                      className="w-full bg-white border border-slate-200 text-slate-900 text-xs rounded-xl px-3.5 py-2 font-mono focus:border-purple-600 focus:outline-none"
+                    />
+                  </div>
+                </div>
+              </div>
+
               <div className="space-y-4">
                 {(formData.realResults?.videoCards || []).map((card, index) => {
                   const updateReelCardField = (field, val) => {
@@ -2040,14 +2148,46 @@ export default function HomepageCmsPage() {
                         </div>
 
                         <div>
-                          <label className="block text-[11px] font-bold text-slate-700 mb-1">
-                            Badge Tag
-                          </label>
+                          <div className="flex items-center justify-between mb-1">
+                            <label className="block text-[11px] font-bold text-slate-700">
+                              Bestseller Tag (બેસ્ટસેલર ટેગ)
+                            </label>
+                            <label className="relative inline-flex items-center cursor-pointer">
+                              <input
+                                type="checkbox"
+                                checked={card.isBestseller !== false && card.tag !== ''}
+                                onChange={(e) => {
+                                  const checked = e.target.checked
+                                  setFormData((prev) => {
+                                    const updatedCards = [...(prev.realResults?.videoCards || [])]
+                                    updatedCards[index] = {
+                                      ...updatedCards[index],
+                                      isBestseller: checked,
+                                      tag: checked ? (card.tag || 'BESTSELLER') : '',
+                                    }
+                                    return {
+                                      ...prev,
+                                      realResults: {
+                                        ...(prev.realResults || {}),
+                                        videoCards: updatedCards,
+                                      },
+                                    }
+                                  })
+                                }}
+                                className="sr-only peer"
+                              />
+                              <div className="w-8 h-4 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:bg-amber-500"></div>
+                              <span className="ml-1.5 text-[10px] font-bold text-amber-600">
+                                {card.isBestseller !== false && card.tag !== '' ? 'ON' : 'OFF'}
+                              </span>
+                            </label>
+                          </div>
                           <input
                             type="text"
+                            placeholder="e.g. BESTSELLER or TOP RATED"
                             value={card.tag || ''}
                             onChange={(e) => updateReelCardField('tag', e.target.value)}
-                            className="w-full bg-white border border-slate-200 text-slate-900 text-xs rounded-xl px-3.5 py-2 font-mono focus:border-blue-600 focus:outline-none"
+                            className="w-full bg-white border border-slate-200 text-slate-900 text-xs rounded-xl px-3.5 py-2 font-mono font-bold focus:border-blue-600 focus:outline-none uppercase"
                           />
                         </div>
 

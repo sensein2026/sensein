@@ -77,10 +77,19 @@ export default function ShopPage() {
 
   const categories = categoriesData?.data || []
 
-  // Client-side Price & Rating Filtering
+  // Client-side Price, Rating & Bestseller Filtering
   const filteredProducts = useMemo(() => {
     const rawProducts = productsData?.data || []
     return rawProducts.filter((p) => {
+      if (activeFilter === 'bestseller' || activeFilter === 'bestsellers') {
+        const isBs =
+          p.isBestseller === true ||
+          p.isFeatured === true ||
+          (p.rating >= 4.7) ||
+          (Array.isArray(p.tags) && p.tags.some((t) => t.toLowerCase().includes('bestseller')))
+        if (!isBs) return false
+      }
+
       if (priceRange === 'under-500' && p.price >= 500) return false
       if (priceRange === '500-1000' && (p.price < 500 || p.price > 1000)) return false
       if (priceRange === '1000-2000' && (p.price < 1000 || p.price > 2000)) return false
@@ -90,7 +99,7 @@ export default function ShopPage() {
 
       return true
     })
-  }, [productsData, priceRange, ratingFilter])
+  }, [productsData, activeFilter, priceRange, ratingFilter])
 
   const cartItems = useSelector(selectCartItems)
 
@@ -297,6 +306,37 @@ export default function ShopPage() {
                 className="text-[11px] font-bold text-rosegold-dark hover:underline"
               >
                 Clear All
+              </button>
+            </div>
+
+            {/* Curated Collections (Bestsellers) */}
+            <div className="space-y-2 pb-2">
+              <label className="block text-xs font-bold uppercase tracking-wider text-charcoal">
+                Curated Collections
+              </label>
+              <button
+                type="button"
+                onClick={() => {
+                  if (activeFilter === 'bestseller') {
+                    setSearchParams(activeCategory ? { category: activeCategory } : {})
+                  } else {
+                    setSearchParams({
+                      ...(activeCategory ? { category: activeCategory } : {}),
+                      filter: 'bestseller',
+                    })
+                  }
+                }}
+                className={`w-full text-left text-xs py-2.5 px-3 rounded-xl transition-all flex items-center justify-between font-bold cursor-pointer border ${
+                  activeFilter === 'bestseller'
+                    ? 'bg-amber-400 text-stone-950 border-amber-400 shadow-xs'
+                    : 'bg-stone-50 text-stone-700 hover:bg-stone-100 border-stone-200'
+                }`}
+              >
+                <div className="flex items-center gap-2">
+                  <Sparkles className="h-3.5 w-3.5 text-amber-600" />
+                  <span>★ Bestsellers Collection</span>
+                </div>
+                {activeFilter === 'bestseller' && <Check className="h-3.5 w-3.5 stroke-[3]" />}
               </button>
             </div>
 
@@ -658,8 +698,38 @@ export default function ShopPage() {
                 </div>
               </div>
 
-              {/* Content Body */}
-              <div className="overflow-y-auto space-y-3.5 pr-1 scrollbar-none flex-1 overscroll-contain">
+              {/* Scrollable Filter Options */}
+              <div className="overflow-y-auto space-y-4 flex-1 pr-1">
+                {/* Curated Collection */}
+                <div className="space-y-1.5 pb-1">
+                  <span className="text-[10px] font-extrabold uppercase tracking-widest text-stone-400 font-mono">
+                    Special Collections
+                  </span>
+                  <div className="flex flex-wrap gap-1.5">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (activeFilter === 'bestseller') {
+                          setSearchParams(activeCategory ? { category: activeCategory } : {})
+                        } else {
+                          setSearchParams({
+                            ...(activeCategory ? { category: activeCategory } : {}),
+                            filter: 'bestseller',
+                          })
+                        }
+                      }}
+                      className={`text-[11px] px-3 py-1.5 rounded-lg transition-all font-bold cursor-pointer flex items-center gap-1.5 border ${
+                        activeFilter === 'bestseller'
+                          ? 'bg-amber-400 text-stone-950 border-amber-400 shadow-xs'
+                          : 'bg-stone-100 text-stone-700 hover:bg-stone-200/70 border-stone-200'
+                      }`}
+                    >
+                      <Sparkles className="h-3 w-3 text-amber-600" />
+                      <span>★ Bestsellers</span>
+                    </button>
+                  </div>
+                </div>
+
                 {/* Categories */}
                 <div className="space-y-1.5">
                   <span className="text-[10px] font-extrabold uppercase tracking-widest text-stone-400 font-mono">

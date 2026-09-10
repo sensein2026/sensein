@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
+import { ChevronLeft, ChevronRight } from 'lucide-react'
 import WavyTickerBar from '@/components/WavyTickerBar'
 import SenseinLogo from '@/components/SenseinLogo'
 
@@ -19,6 +20,7 @@ const defaultSlides = [
     btnLink: '/shop?category=haircare',
     btnBgColor: '#5A3859',
     btnTextColor: '#ffffff',
+    duration: 6,
   },
   {
     id: 2,
@@ -34,6 +36,7 @@ const defaultSlides = [
     btnLink: '/shop?category=haircare',
     btnBgColor: '#5A3859',
     btnTextColor: '#ffffff',
+    duration: 6,
   },
   {
     id: 3,
@@ -49,6 +52,7 @@ const defaultSlides = [
     btnLink: '/shop',
     btnBgColor: '#5A3859',
     btnTextColor: '#ffffff',
+    duration: 6,
   },
 ]
 
@@ -56,6 +60,7 @@ export default function HeroSlider({ config }) {
   const [currentSlide, setCurrentSlide] = useState(0)
   const videoRef = useRef(null)
   const timerRef = useRef(null)
+  const touchStartX = useRef(0)
   const navigate = useNavigate()
 
   // If CMS slides array exists (even if empty []), respect CMS instead of forcing defaultSlides
@@ -69,17 +74,47 @@ export default function HeroSlider({ config }) {
       ? activeSlides[safeCurrentSlide] || activeSlides[0]
       : null
 
-  // Auto advance non-video slides every 6 seconds (ALL HOOKS AT TOP LEVEL)
+  // Configurable duration in seconds (default 6s)
+  const slideDurationSeconds = Math.max(
+    2,
+    Number(activeSlide?.duration || config?.slideDuration || config?.duration || 6)
+  )
+
+  const nextSlide = (e) => {
+    if (e) e.stopPropagation()
+    if (timerRef.current) clearTimeout(timerRef.current)
+    if (activeSlides && activeSlides.length > 1) {
+      setCurrentSlide((prev) => (prev + 1) % activeSlides.length)
+    }
+  }
+
+  const prevSlide = (e) => {
+    if (e) e.stopPropagation()
+    if (timerRef.current) clearTimeout(timerRef.current)
+    if (activeSlides && activeSlides.length > 1) {
+      setCurrentSlide((prev) => (prev - 1 + activeSlides.length) % activeSlides.length)
+    }
+  }
+
+  const goToSlide = (index, e) => {
+    if (e) e.stopPropagation()
+    if (timerRef.current) clearTimeout(timerRef.current)
+    setCurrentSlide(index)
+  }
+
+  // Auto advance slides according to configured duration in seconds
   useEffect(() => {
-    if (activeSlide?.type === 'image' && activeSlides && activeSlides.length > 1) {
-      timerRef.current = setTimeout(() => {
-        setCurrentSlide((prev) => (prev + 1) % activeSlides.length)
-      }, 6000)
+    if (activeSlides && activeSlides.length > 1) {
+      if (activeSlide?.type === 'image' || !activeSlide?.videoSrc) {
+        timerRef.current = setTimeout(() => {
+          setCurrentSlide((prev) => (prev + 1) % activeSlides.length)
+        }, slideDurationSeconds * 1000)
+      }
     }
     return () => {
       if (timerRef.current) clearTimeout(timerRef.current)
     }
-  }, [safeCurrentSlide, activeSlide?.type, activeSlides?.length])
+  }, [safeCurrentSlide, activeSlide?.type, activeSlides?.length, slideDurationSeconds])
 
   const handleVideoEnded = () => {
     if (activeSlides && activeSlides.length > 0) {
@@ -88,12 +123,26 @@ export default function HeroSlider({ config }) {
   }
 
   const handleSlideClick = (e) => {
-    const link = activeSlide?.btnLink || '/shop'
+    const link = activeSlide?.btnLink || activeSlide?.slideLink || activeSlide?.link || '/shop'
     if (!link) return
     if (link.startsWith('http://') || link.startsWith('https://')) {
       window.location.href = link
     } else {
       navigate(link)
+    }
+  }
+
+  const handleTouchStart = (e) => {
+    touchStartX.current = e.touches[0].clientX
+  }
+
+  const handleTouchEnd = (e) => {
+    const touchEndX = e.changedTouches[0].clientX
+    const diff = touchStartX.current - touchEndX
+    if (diff > 50) {
+      nextSlide()
+    } else if (diff < -50) {
+      prevSlide()
     }
   }
 
@@ -111,6 +160,8 @@ export default function HeroSlider({ config }) {
   return (
     <div
       onClick={handleSlideClick}
+      onTouchStart={handleTouchStart}
+      onTouchEnd={handleTouchEnd}
       className="relative w-full overflow-hidden bg-black text-white h-[520px] sm:h-[650px] lg:h-[80vh] min-h-[480px] cursor-pointer select-none group"
     >
 
@@ -154,6 +205,29 @@ export default function HeroSlider({ config }) {
       {/* Luxury Dark Gradient Overlay for optimal readability */}
       <div className="absolute inset-0 z-15 bg-gradient-to-t from-black/90 via-black/35 to-black/20 pointer-events-none" />
 
+      {/* Manual Left & Right Navigation Arrows */}
+      {activeSlides.length > 1 && (
+        <>
+          <button
+            type="button"
+            onClick={prevSlide}
+            aria-label="Previous Slide"
+            className="absolute left-3 sm:left-6 top-1/2 -translate-y-1/2 z-30 w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-black/40 hover:bg-[#5A3859] text-white border border-white/20 backdrop-blur-md flex items-center justify-center transition-all opacity-70 hover:opacity-100 hover:scale-110 cursor-pointer shadow-lg"
+          >
+            <ChevronLeft className="w-5 h-5 sm:w-6 sm:h-6" />
+          </button>
+
+          <button
+            type="button"
+            onClick={nextSlide}
+            aria-label="Next Slide"
+            className="absolute right-3 sm:right-6 top-1/2 -translate-y-1/2 z-30 w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-black/40 hover:bg-[#5A3859] text-white border border-white/20 backdrop-blur-md flex items-center justify-center transition-all opacity-70 hover:opacity-100 hover:scale-110 cursor-pointer shadow-lg"
+          >
+            <ChevronRight className="w-5 h-5 sm:w-6 sm:h-6" />
+          </button>
+        </>
+      )}
+
       {/* Hero Content Overlay (Clean Bottom-Weighted Layout) */}
       <div className="absolute inset-0 z-20 flex flex-col items-center justify-end pb-16 sm:pb-24 text-center px-4 sm:px-12 pointer-events-none">
         <div className="max-w-2xl space-y-2.5 sm:space-y-4 pointer-events-auto flex flex-col items-center text-center">
@@ -192,7 +266,7 @@ export default function HeroSlider({ config }) {
           {activeSlide.showBtn !== false && activeSlide.btnText && (
             <div className="pt-1.5 sm:pt-2">
               <Link
-                to={activeSlide.btnLink || '/shop'}
+                to={activeSlide.btnLink || activeSlide.slideLink || '/shop'}
                 onClick={(e) => e.stopPropagation()}
                 style={{
                   backgroundColor: activeSlide.btnBgColor || '#5A3859',
@@ -202,6 +276,25 @@ export default function HeroSlider({ config }) {
               >
                 {activeSlide.btnText}
               </Link>
+            </div>
+          )}
+
+          {/* Slide Indicator Pagination Dots */}
+          {activeSlides.length > 1 && (
+            <div className="pt-3 flex items-center justify-center gap-2" onClick={(e) => e.stopPropagation()}>
+              {activeSlides.map((_, dotIdx) => (
+                <button
+                  key={dotIdx}
+                  type="button"
+                  onClick={(e) => goToSlide(dotIdx, e)}
+                  aria-label={`Go to slide ${dotIdx + 1}`}
+                  className={`h-2 transition-all rounded-full cursor-pointer ${
+                    dotIdx === safeCurrentSlide
+                      ? 'w-8 bg-white shadow-sm'
+                      : 'w-2 bg-white/40 hover:bg-white/70'
+                  }`}
+                />
+              ))}
             </div>
           )}
 
