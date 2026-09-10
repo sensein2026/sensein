@@ -25,6 +25,9 @@ import {
   Edit2,
   Save,
   Download,
+  Upload,
+  Video,
+  Sparkles,
 } from 'lucide-react'
 import {
   useGetMyOrdersQuery,
@@ -93,12 +96,25 @@ export default function AccountPage() {
   const [updateOrderAddress, { isLoading: isUpdatingOrderAddress }] = useUpdateOrderAddressMutation()
   const [createReturnRequest, { isLoading: isSubmittingReturn }] = useCreateReturnRequestMutation()
 
+  const isWithin7DaysReplacement = (order) => {
+    if (!order) return false
+    const status = (order.fulfillmentStatus || order.orderStatus || '').toUpperCase()
+    if (status !== 'DELIVERED') return false
+    if (order.returnStatus && order.returnStatus !== 'NONE') return false
+    const delDate = order.deliveredAt || order.deliveryDate || order.updatedAt
+    if (!delDate) return true
+    const diffMs = Date.now() - new Date(delDate).getTime()
+    return diffMs <= 7 * 24 * 60 * 60 * 1000
+  }
+
   const [returnModalOrder, setReturnModalOrder] = useState(null)
   const [returnForm, setReturnForm] = useState({
-    selectedItems: {}, // prodId -> { selected, quantity, reason, customerComment }
-    requestType: 'RETURN_REFUND',
-    evidenceMedia: [],
+    selectedItems: {}, // prodId -> { selected, quantity, reason, customerComment, customReason }
+    requestType: 'RETURN_REPLACEMENT',
+    evidenceMedia: [], // array of { url, fileName, mimeType }
     generalComment: '',
+    selectedReason: 'Damaged Product', // 'Damaged Product' | 'Wrong Product' | 'Other'
+    otherReasonText: '',
   })
 
   const handleOpenReturnModal = (order) => {
@@ -115,15 +131,53 @@ export default function AccountPage() {
         selected: true,
         reason: 'Damaged Product',
         customerComment: '',
+        customReason: '',
       }
     })
     setReturnForm({
       selectedItems: initialItems,
-      requestType: 'RETURN_REFUND',
+      requestType: 'RETURN_REPLACEMENT',
       evidenceMedia: [],
       generalComment: '',
+      selectedReason: 'Damaged Product',
+      otherReasonText: '',
     })
     setReturnModalOrder(order)
+  }
+
+  const handleEvidenceFileUpload = (e) => {
+    const files = Array.from(e.target.files || [])
+    if (files.length === 0) return
+
+    files.forEach((file) => {
+      if (file.size > 25 * 1024 * 1024) {
+        alert(`File ${file.name} is too large. Max size is 25MB.`)
+        return
+      }
+      const reader = new FileReader()
+      reader.onload = (event) => {
+        setReturnForm((prev) => ({
+          ...prev,
+          evidenceMedia: [
+            ...prev.evidenceMedia,
+            {
+              url: event.target.result,
+              fileName: file.name,
+              mimeType: file.type,
+              size: file.size,
+            },
+          ],
+        }))
+      }
+      reader.readAsDataURL(file)
+    })
+  }
+
+  const handleRemoveEvidence = (index) => {
+    setReturnForm((prev) => ({
+      ...prev,
+      evidenceMedia: prev.evidenceMedia.filter((_, idx) => idx !== index),
+    }))
   }
 
   const handleSubmitReturnRequest = async (e) => {
@@ -132,24 +186,40 @@ export default function AccountPage() {
 
     const itemsToReturn = Object.values(returnForm.selectedItems).filter((it) => it.selected)
     if (itemsToReturn.length === 0) {
-      alert('Please select at least one item to return.')
+      alert('Please select at least one item for replacement / return.')
       return
     }
+
+    const finalReason =
+      returnForm.selectedReason === 'Other'
+        ? returnForm.otherReasonText.trim() || 'Other reason specified by customer'
+        : returnForm.selectedReason
+
+    const formattedItems = itemsToReturn.map((it) => ({
+      ...it,
+      reason: finalReason,
+      customerComment: returnForm.generalComment || it.customerComment,
+    }))
+
+    const confirmed = window.confirm(
+      `Are you sure you want to submit this replacement request for Order #${returnModalOrder.orderNumber}?\n\nReason: ${finalReason}\nOur QC team will review your photos/videos and schedule reverse pickup.`
+    )
+    if (!confirmed) return
 
     try {
       const res = await createReturnRequest({
         orderId: returnModalOrder._id,
-        items: itemsToReturn,
+        items: formattedItems,
         requestType: returnForm.requestType,
         evidenceMedia: returnForm.evidenceMedia,
-        customerComment: returnForm.generalComment,
+        customerComment: `${finalReason}: ${returnForm.generalComment || ''}`.trim(),
       }).unwrap()
 
-      alert(res?.message || 'Return / Replacement request submitted successfully!')
+      alert(res?.message || 'Replacement request submitted successfully! We will arrange reverse pickup.')
       setReturnModalOrder(null)
       refetchOrders()
     } catch (err) {
-      alert(err?.data?.message || 'Failed to submit return request')
+      alert(err?.data?.message || 'Failed to submit replacement request. Please contact support.')
     }
   }
 
@@ -809,7 +879,8 @@ export default function AccountPage() {
               </span>
             </div>
 
-            {/* Action Buttons Inside Modal (Cancel Order + Track Order) */}
+            {/* Action Buttons Inside Modal (Cancel Order + Return/Replace + Track Order) */}
+            <div className="pt-3 border-t border-stone-200/80 flex items-center gap-2.5 flex-wrap">
               {!['PICKED_UP', 'IN_TRANSIT', 'OUT_FOR_DELIVERY', 'DELIVERED', 'CANCELLED', 'RETURNED', 'RTO', 'PAYMENT_FAILED'].includes(
                 (selectedOrderModal.fulfillmentStatus || selectedOrderModal.orderStatus || '').toUpperCase()
               ) && (
@@ -821,6 +892,21 @@ export default function AccountPage() {
                 >
                   <XCircle className="h-4 w-4 text-rose-600 shrink-0" />
                   <span>Cancel Order</span>
+                </button>
+              )}
+
+              {isWithin7DaysReplacement(selectedOrderModal) && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    const o = selectedOrderModal
+                    setSelectedOrderModal(null)
+                    handleOpenReturnModal(o)
+                  }}
+                  className="flex-1 py-2.5 px-4 bg-purple-50 hover:bg-purple-100 text-purple-700 text-xs font-bold uppercase rounded-xl border border-purple-200 transition-all flex items-center justify-center gap-1.5 cursor-pointer shadow-2xs whitespace-nowrap"
+                >
+                  <Package className="h-4 w-4 text-purple-600 shrink-0" />
+                  <span>Return / Replace</span>
                 </button>
               )}
 
@@ -992,6 +1078,22 @@ export default function AccountPage() {
                 <div className="grid grid-cols-2 gap-2.5">
                   <button
                     type="button"
+                    onClick={() => setReturnForm({ ...returnForm, requestType: 'RETURN_REPLACEMENT' })}
+                    className={`p-3 rounded-xl border text-left cursor-pointer transition-all ${
+                      returnForm.requestType === 'RETURN_REPLACEMENT'
+                        ? 'border-[#5A3859] bg-[#5A3859]/5 ring-1 ring-[#5A3859]'
+                        : 'border-stone-200 hover:border-stone-300'
+                    }`}
+                  >
+                    <div className="font-bold text-stone-900 flex items-center gap-1.5">
+                      <Sparkles className="h-3.5 w-3.5 text-[#5A3859]" />
+                      <span>Free Replacement</span>
+                    </div>
+                    <div className="text-[10px] text-stone-500 mt-0.5">Receive a brand new replacement product</div>
+                  </button>
+
+                  <button
+                    type="button"
                     onClick={() => setReturnForm({ ...returnForm, requestType: 'RETURN_REFUND' })}
                     className={`p-3 rounded-xl border text-left cursor-pointer transition-all ${
                       returnForm.requestType === 'RETURN_REFUND'
@@ -1000,128 +1102,171 @@ export default function AccountPage() {
                     }`}
                   >
                     <div className="font-bold text-stone-900">Return & Refund</div>
-                    <div className="text-[10px] text-stone-500">Refund back to original payment method</div>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => setReturnForm({ ...returnForm, requestType: 'RETURN_REPLACEMENT' })}
-                    className={`p-3 rounded-xl border text-left cursor-pointer transition-all ${
-                      returnForm.requestType === 'RETURN_REPLACEMENT'
-                        ? 'border-[#5A3859] bg-[#5A3859]/5 ring-1 ring-[#5A3859]'
-                        : 'border-stone-200 hover:border-stone-300'
-                    }`}
-                  >
-                    <div className="font-bold text-stone-900">Free Replacement</div>
-                    <div className="text-[10px] text-stone-500">Receive a fresh replacement unit</div>
+                    <div className="text-[10px] text-stone-500 mt-0.5">Refund back to your bank/payment source</div>
                   </button>
                 </div>
               </div>
 
-              {/* Items to return with reasons */}
-              <div className="space-y-2">
+              {/* 3 Main Return/Replacement Reason Buttons */}
+              <div className="space-y-1.5">
                 <label className="text-[11px] font-bold text-stone-700 block uppercase tracking-wider">
-                  Select Items & Reason:
+                  Primary Reason for Request:
                 </label>
-                <div className="divide-y divide-stone-100 border border-stone-200 rounded-xl overflow-hidden max-h-56 overflow-y-auto">
+                <div className="grid grid-cols-3 gap-2">
+                  {[
+                    { key: 'Damaged Product', label: 'Damaged Product', icon: AlertTriangle, color: 'text-amber-600' },
+                    { key: 'Wrong Product', label: 'Wrong Product', icon: XCircle, color: 'text-rose-600' },
+                    { key: 'Other', label: 'Other', icon: Edit2, color: 'text-blue-600' },
+                  ].map((r) => {
+                    const IconComponent = r.icon
+                    const isSelected = returnForm.selectedReason === r.key
+                    return (
+                      <button
+                        key={r.key}
+                        type="button"
+                        onClick={() => setReturnForm({ ...returnForm, selectedReason: r.key })}
+                        className={`p-2.5 rounded-xl border flex flex-col items-center justify-center text-center gap-1 transition-all cursor-pointer ${
+                          isSelected
+                            ? 'border-[#5A3859] bg-[#5A3859]/10 ring-1 ring-[#5A3859] font-bold text-stone-900'
+                            : 'border-stone-200 hover:border-stone-300 text-stone-700 bg-stone-50/50'
+                        }`}
+                      >
+                        <IconComponent className={`h-4 w-4 ${r.color}`} />
+                        <span className="text-[11px] font-bold">{r.label}</span>
+                      </button>
+                    )
+                  })}
+                </div>
+
+                {/* If Other is selected, show custom reason text input */}
+                {returnForm.selectedReason === 'Other' && (
+                  <div className="pt-2 animate-in fade-in">
+                    <label className="text-[10.5px] font-bold text-stone-600 block mb-1">
+                      Specify Custom Reason:
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      placeholder="Please specify why you want a replacement"
+                      value={returnForm.otherReasonText}
+                      onChange={(e) => setReturnForm({ ...returnForm, otherReasonText: e.target.value })}
+                      className="w-full px-3 py-2 rounded-xl border border-stone-300 focus:border-[#5A3859] focus:ring-1 focus:ring-[#5A3859] outline-none text-xs font-medium"
+                    />
+                  </div>
+                )}
+              </div>
+
+              {/* Items to return selection */}
+              <div className="space-y-1.5">
+                <label className="text-[11px] font-bold text-stone-700 block uppercase tracking-wider">
+                  Select Products to Replace:
+                </label>
+                <div className="divide-y divide-stone-100 border border-stone-200 rounded-xl overflow-hidden max-h-40 overflow-y-auto bg-stone-50/40">
                   {(returnModalOrder.items || []).map((it) => {
                     const pId = it.product?._id || it.product || it._id
                     const currentItemState = returnForm.selectedItems[pId] || {}
                     return (
-                      <div key={pId} className="p-3 space-y-2 bg-stone-50/50">
-                        <div className="flex items-center justify-between gap-3">
-                          <label className="flex items-center gap-2.5 cursor-pointer">
-                            <input
-                              type="checkbox"
-                              checked={Boolean(currentItemState.selected)}
-                              onChange={(e) => {
-                                setReturnForm({
-                                  ...returnForm,
-                                  selectedItems: {
-                                    ...returnForm.selectedItems,
-                                    [pId]: {
-                                      ...currentItemState,
-                                      selected: e.target.checked,
-                                    },
+                      <div key={pId} className="p-2.5 flex items-center justify-between gap-2.5">
+                        <label className="flex items-center gap-2 cursor-pointer min-w-0">
+                          <input
+                            type="checkbox"
+                            checked={Boolean(currentItemState.selected)}
+                            onChange={(e) => {
+                              setReturnForm({
+                                ...returnForm,
+                                selectedItems: {
+                                  ...returnForm.selectedItems,
+                                  [pId]: {
+                                    ...currentItemState,
+                                    selected: e.target.checked,
                                   },
-                                })
-                              }}
-                              className="rounded border-stone-300 text-[#5A3859] focus:ring-[#5A3859]"
-                            />
-                            <span className="font-bold text-stone-900">{it.name}</span>
-                          </label>
-                          <span className="text-[11px] font-mono text-stone-600">
-                            Qty: {it.quantity} (₹{it.price})
-                          </span>
-                        </div>
-
-                        {currentItemState.selected && (
-                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">
-                            <div>
-                              <span className="text-[10px] text-stone-500 block mb-0.5 font-bold">Reason:</span>
-                              <select
-                                value={currentItemState.reason || 'Damaged Product'}
-                                onChange={(e) => {
-                                  setReturnForm({
-                                    ...returnForm,
-                                    selectedItems: {
-                                      ...returnForm.selectedItems,
-                                      [pId]: {
-                                        ...currentItemState,
-                                        reason: e.target.value,
-                                      },
-                                    },
-                                  })
-                                }}
-                                className="w-full p-1.5 rounded-lg border border-stone-300 bg-white text-xs"
-                              >
-                                <option value="Wrong Product">Wrong Product</option>
-                                <option value="Damaged Product">Damaged Product</option>
-                                <option value="Defective Product">Defective Product</option>
-                                <option value="Missing Item">Missing Item</option>
-                                <option value="Other">Other</option>
-                              </select>
-                            </div>
-                            <div>
-                              <span className="text-[10px] text-stone-500 block mb-0.5 font-bold">Notes / Description:</span>
-                              <input
-                                type="text"
-                                placeholder="Describe the issue"
-                                value={currentItemState.customerComment || ''}
-                                onChange={(e) => {
-                                  setReturnForm({
-                                    ...returnForm,
-                                    selectedItems: {
-                                      ...returnForm.selectedItems,
-                                      [pId]: {
-                                        ...currentItemState,
-                                        customerComment: e.target.value,
-                                      },
-                                    },
-                                  })
-                                }}
-                                className="w-full p-1.5 rounded-lg border border-stone-300 bg-white text-xs"
-                              />
-                            </div>
-                          </div>
-                        )}
+                                },
+                              })
+                            }}
+                            className="rounded border-stone-300 text-[#5A3859] focus:ring-[#5A3859]"
+                          />
+                          <span className="font-bold text-stone-900 truncate text-[11.5px]">{it.name}</span>
+                        </label>
+                        <span className="text-[10.5px] font-mono text-stone-500 shrink-0">
+                          Qty: {it.quantity} (₹{it.price})
+                        </span>
                       </div>
                     )
                   })}
                 </div>
               </div>
 
-              {/* General Comments & Evidence */}
+              {/* Upload Proof (Photos or Videos) */}
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <label className="text-[11px] font-bold text-stone-700 block uppercase tracking-wider">
+                    Upload Photo / Video Proof:
+                  </label>
+                  <span className="text-[10px] text-stone-400">Max 25MB • Images & Videos</span>
+                </div>
+
+                <div className="border-2 border-dashed border-stone-200 hover:border-[#5A3859]/50 rounded-xl p-3 bg-stone-50/60 text-center transition-colors">
+                  <input
+                    type="file"
+                    id="return-evidence-file"
+                    multiple
+                    accept="image/*,video/*"
+                    onChange={handleEvidenceFileUpload}
+                    className="hidden"
+                  />
+                  <label
+                    htmlFor="return-evidence-file"
+                    className="cursor-pointer flex flex-col items-center justify-center gap-1.5"
+                  >
+                    <Upload className="h-5 w-5 text-[#5A3859]" />
+                    <div className="text-[11px] font-bold text-stone-700">
+                      Click to upload photos or unboxing videos
+                    </div>
+                    <div className="text-[10px] text-stone-400">
+                      Clear visual proof helps our QC team approve your request faster
+                    </div>
+                  </label>
+                </div>
+
+                {/* Proof Thumbnails Preview */}
+                {returnForm.evidenceMedia.length > 0 && (
+                  <div className="flex items-center gap-2 overflow-x-auto pt-2 pb-1">
+                    {returnForm.evidenceMedia.map((m, idx) => (
+                      <div key={idx} className="relative w-16 h-16 rounded-lg border border-stone-200 overflow-hidden shrink-0 bg-stone-100 group">
+                        {m.mimeType?.startsWith('video/') ? (
+                          <div className="w-full h-full flex flex-col items-center justify-center bg-stone-900 text-white p-1">
+                            <Video className="h-5 w-5 text-purple-400" />
+                            <span className="text-[8px] truncate max-w-full font-mono">Video</span>
+                          </div>
+                        ) : (
+                          <img src={m.url} alt={m.fileName} className="w-full h-full object-cover" />
+                        )}
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveEvidence(idx)}
+                          className="absolute top-0.5 right-0.5 bg-black/70 hover:bg-rose-600 text-white p-0.5 rounded-full transition-colors cursor-pointer"
+                          title="Remove"
+                        >
+                          <X className="h-3 w-3" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Detailed Description */}
               <div className="space-y-1.5">
                 <label className="text-[11px] font-bold text-stone-700 block uppercase tracking-wider">
-                  Additional Evidence / Description:
+                  Detailed Issue Description:
                 </label>
                 <textarea
                   rows={2}
-                  placeholder="Provide any additional comments for QC verification"
+                  required
+                  placeholder="Explain the defect, missing parts, or why you need a replacement..."
                   value={returnForm.generalComment}
                   onChange={(e) => setReturnForm({ ...returnForm, generalComment: e.target.value })}
-                  className="w-full p-2 rounded-lg border border-stone-300 bg-white text-xs resize-none"
+                  className="w-full p-2.5 rounded-xl border border-stone-300 focus:border-[#5A3859] focus:ring-1 focus:ring-[#5A3859] outline-none bg-white text-xs resize-none font-medium"
                 />
               </div>
 
@@ -1129,16 +1274,17 @@ export default function AccountPage() {
                 <button
                   type="button"
                   onClick={() => setReturnModalOrder(null)}
-                  className="px-3.5 py-2 border border-stone-300 text-stone-700 hover:bg-stone-50 rounded-lg text-xs font-semibold cursor-pointer"
+                  className="px-4 py-2 border border-stone-300 text-stone-700 hover:bg-stone-50 rounded-xl text-xs font-semibold cursor-pointer"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
                   disabled={isSubmittingReturn}
-                  className="bg-[#5A3859] hover:bg-[#482b47] text-white text-xs font-bold px-5 py-2 rounded-lg flex items-center gap-1.5 shadow-2xs transition-all cursor-pointer disabled:opacity-50"
+                  className="bg-[#5A3859] hover:bg-[#482b47] text-white text-xs font-bold px-6 py-2.5 rounded-xl flex items-center gap-1.5 shadow-sm transition-all cursor-pointer disabled:opacity-50"
                 >
-                  <span>{isSubmittingReturn ? 'Submitting...' : 'Submit Request'}</span>
+                  <Sparkles className="h-3.5 w-3.5" />
+                  <span>{isSubmittingReturn ? 'Submitting Request...' : 'Submit Replacement Request'}</span>
                 </button>
               </div>
             </form>
@@ -1835,8 +1981,8 @@ export default function AccountPage() {
                         </button>
                       )}
 
-                      {/* Return / Replacement Button on Delivered Orders */}
-                      {(order.fulfillmentStatus === 'DELIVERED' || order.orderStatus === 'DELIVERED') && (!order.returnStatus || order.returnStatus === 'NONE') && (
+                      {/* Return / Replacement Button on Delivered Orders (Within 7 Days of Delivery) */}
+                      {isWithin7DaysReplacement(order) && (
                         <button
                           type="button"
                           onClick={() => handleOpenReturnModal(order)}
