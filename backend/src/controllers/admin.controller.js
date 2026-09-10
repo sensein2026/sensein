@@ -509,6 +509,8 @@ export const createProduct = async (req, res) => {
       isFeatured,
       ingredients,
       howToUse,
+      size,
+      sizes,
     } = req.body
 
     const productSlug = slug || name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)+/g, '')
@@ -531,6 +533,8 @@ export const createProduct = async (req, res) => {
       isFeatured: isFeatured || false,
       ingredients: ingredients || '',
       howToUse: howToUse || '',
+      size: size || '250ml',
+      sizes: Array.isArray(sizes) ? sizes : sizes ? [sizes] : ['250ml'],
     })
 
     await product.save()

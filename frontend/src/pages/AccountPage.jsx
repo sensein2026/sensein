@@ -407,7 +407,11 @@ export default function AccountPage() {
   const savedAddresses = addressRes?.data || []
   const [addAddress, { isLoading: isAddingAddr }] = useAddSavedAddressMutation()
   const [updateAddress, { isLoading: isUpdatingAddr }] = useUpdateSavedAddressMutation()
+  const [deleteAddress, { isLoading: isDeletingAddr }] = useDeleteSavedAddressMutation()
   const [triggerCheckPincode, { isFetching: isCheckingPincode }] = useLazyCheckPincodeQuery()
+
+  // Address Category Filter State (ALL | HOME | WORK | OTHER)
+  const [addressCategoryFilter, setAddressCategoryFilter] = useState('ALL')
 
   // PIN Code Verification State
   const [pincodeStatus, setPincodeStatus] = useState({
@@ -433,6 +437,24 @@ export default function AccountPage() {
     postalCode: '',
     isDefault: false,
   })
+
+  const handleSetDefaultAddress = async (addr) => {
+    try {
+      await updateAddress({
+        addressId: addr._id,
+        title: addr.title || 'Home',
+        fullName: addr.fullName,
+        phone: addr.phone,
+        addressLine: addr.addressLine,
+        city: addr.city,
+        state: addr.state,
+        postalCode: addr.postalCode,
+        isDefault: true,
+      }).unwrap()
+    } catch (err) {
+      alert(err?.data?.message || 'Failed to set default address')
+    }
+  }
 
   useEffect(() => {
     window.scrollTo(0, 0)
@@ -1793,6 +1815,20 @@ export default function AccountPage() {
                 </div>
               </div>
 
+              {/* Set as Default Address Checkbox */}
+              <div className="flex items-center gap-2 pt-1">
+                <input
+                  type="checkbox"
+                  id="edit-is-default"
+                  checked={!!editingAddr.isDefault}
+                  onChange={(e) => setEditingAddr((p) => ({ ...p, isDefault: e.target.checked }))}
+                  className="h-4 w-4 rounded text-[#5A3859] focus:ring-[#5A3859] border-stone-300 cursor-pointer"
+                />
+                <label htmlFor="edit-is-default" className="text-xs font-semibold text-stone-700 cursor-pointer select-none">
+                  Set as default delivery address (Pre-selected at checkout)
+                </label>
+              </div>
+
               {editErrors.general && (
                 <div className="text-xs text-rose-600 font-bold p-2.5 bg-rose-50 border border-rose-200 rounded-xl animate-in fade-in">
                   ⚠️ {editErrors.general}
@@ -1868,7 +1904,7 @@ export default function AccountPage() {
                             : 'bg-stone-50 text-stone-600 border-stone-200 hover:bg-stone-100'
                         }`}
                       >
-                        {type}
+                        {type === 'Home' ? '🏠 Home' : type === 'Work' ? '🏢 Work' : '📍 Other'}
                       </button>
                     ))}
                   </div>
@@ -2025,6 +2061,20 @@ export default function AccountPage() {
                 </div>
               </div>
 
+              {/* Set as Default Address Checkbox */}
+              <div className="flex items-center gap-2 pt-1">
+                <input
+                  type="checkbox"
+                  id="add-is-default"
+                  checked={!!newAddr.isDefault}
+                  onChange={(e) => setNewAddr((p) => ({ ...p, isDefault: e.target.checked }))}
+                  className="h-4 w-4 rounded text-[#5A3859] focus:ring-[#5A3859] border-stone-300 cursor-pointer"
+                />
+                <label htmlFor="add-is-default" className="text-xs font-semibold text-stone-700 cursor-pointer select-none">
+                  Set as default delivery address (Pre-selected at checkout)
+                </label>
+              </div>
+
               {addErrors.general && (
                 <div className="text-xs text-rose-600 font-bold p-2.5 bg-rose-50 border border-rose-200 rounded-xl animate-in fade-in">
                   ⚠️ {addErrors.general}
@@ -2057,16 +2107,43 @@ export default function AccountPage() {
         </div>
       )}
 
-      <div className="container-page max-w-5xl space-y-8">
-        {/* Clean Header Bar */}
-        <div className="flex items-center justify-between gap-4 pb-2 border-b border-stone-200/80">
-          <div>
-            <h1 className="font-display text-2xl sm:text-3xl font-extrabold text-stone-900 tracking-tight">My Account</h1>
+      <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 space-y-6">
+        {/* Account Header */}
+        <div className="bg-white rounded-3xl p-6 sm:p-8 border border-stone-200/90 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div className="flex items-center gap-4">
+            <div className="h-14 w-14 sm:h-16 sm:w-16 rounded-2xl bg-gradient-to-br from-[#5A3859] to-[#3a2239] text-white flex items-center justify-center font-display text-xl sm:text-2xl font-black shadow-md">
+              {(displayName || 'C').charAt(0).toUpperCase()}
+            </div>
+            <div className="space-y-1">
+              <div className="flex items-center gap-2">
+                <h1 className="font-display text-xl sm:text-2xl font-black text-stone-900">
+                  {displayName}
+                </h1>
+                <span className="text-[10px] font-extrabold uppercase tracking-wider bg-emerald-100/80 text-emerald-800 border border-emerald-200 px-2 py-0.5 rounded-full flex items-center gap-1">
+                  <ShieldCheck className="h-3 w-3 text-emerald-600" />
+                  <span>Verified</span>
+                </span>
+              </div>
+              <p className="text-xs text-stone-500 flex items-center gap-1.5">
+                <Mail className="h-3.5 w-3.5 text-stone-400" />
+                <span>{user?.email}</span>
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-3">
+            <Link
+              to="/shop"
+              className="bg-[#5A3859] hover:bg-[#482b47] text-white text-xs font-extrabold uppercase tracking-wider py-2.5 px-4 rounded-xl shadow-xs hover:shadow transition-all flex items-center gap-1.5 cursor-pointer"
+            >
+              <ShoppingBag className="h-4 w-4" />
+              <span>Continue Shopping</span>
+            </Link>
           </div>
         </div>
 
-        {/* Clean Luxury Underline Tab Bar with Ample Breathing Room */}
-        <div className="flex items-center gap-6 sm:gap-8 text-xs sm:text-sm font-semibold border-b border-stone-200/90 pb-0 overflow-x-auto scrollbar-none select-none">
+        {/* Navigation Tabs (Orders, Saved Addresses, Profile) */}
+        <div className="flex items-center gap-2 sm:gap-6 border-b border-stone-200 text-xs sm:text-sm overflow-x-auto no-scrollbar">
           {/* Tab 1: Orders */}
           <button
             onClick={() => handleTabChange('orders')}
@@ -2077,8 +2154,7 @@ export default function AccountPage() {
             }`}
           >
             <Package className="h-4 w-4 shrink-0 text-[#5A3859]" />
-            <span className="sm:hidden font-bold">Orders</span>
-            <span className="hidden sm:inline">My Orders & History</span>
+            <span className="font-bold">My Orders</span>
             <span className={`text-[11px] px-2 py-0.5 rounded-full font-bold ${
               activeTab === 'orders' ? 'bg-[#5A3859]/10 text-[#5A3859]' : 'bg-stone-100 text-stone-600'
             }`}>
@@ -2096,8 +2172,7 @@ export default function AccountPage() {
             }`}
           >
             <MapPin className="h-4 w-4 shrink-0 text-[#5A3859]" />
-            <span className="sm:hidden font-bold">Addresses</span>
-            <span className="hidden sm:inline">Saved Addresses</span>
+            <span className="font-bold">Saved Addresses</span>
             <span className={`text-[11px] px-2 py-0.5 rounded-full font-bold ${
               activeTab === 'addresses' ? 'bg-[#5A3859]/10 text-[#5A3859]' : 'bg-stone-100 text-stone-600'
             }`}>
@@ -2115,8 +2190,7 @@ export default function AccountPage() {
             }`}
           >
             <User className="h-4 w-4 shrink-0 text-[#5A3859]" />
-            <span className="sm:hidden font-bold">Profile</span>
-            <span className="hidden sm:inline">Profile Details</span>
+            <span className="font-bold">Profile Details</span>
           </button>
         </div>
 
@@ -2348,27 +2422,49 @@ export default function AccountPage() {
                             </div>
 
                             <div className="min-w-0 flex-1 space-y-0.5">
-                              <h4 className="text-xs sm:text-sm font-bold text-stone-900 truncate group-hover:text-[#5A3859] transition-colors">
+                              <div className="font-bold text-xs sm:text-sm text-stone-900 group-hover:text-[#5A3859] transition-colors truncate">
                                 {item.name}
-                              </h4>
-                              <p className="text-[11px] text-stone-500 font-medium">
-                                Qty: <strong className="text-stone-800 font-bold">{item.quantity}</strong>
-                                <span className="mx-1 text-stone-300">×</span>
-                                <span>₹{item.price?.toLocaleString('en-IN')}</span>
-                              </p>
+                              </div>
+                              <div className="text-[11px] text-stone-500 font-medium flex items-center gap-2">
+                                <span>Qty: {item.quantity}</span>
+                                <span>•</span>
+                                <span>₹{item.price?.toLocaleString('en-IN')} each</span>
+                              </div>
                             </div>
                           </div>
 
-                          <div className="text-right shrink-0 flex items-center gap-2 sm:gap-3">
-                            <div className="font-display font-extrabold text-xs sm:text-sm text-stone-900">
+                          <div className="text-right shrink-0">
+                            <div className="font-bold text-xs sm:text-sm text-stone-900 font-display">
                               ₹{(item.price * item.quantity).toLocaleString('en-IN')}
-                            </div>
-                            <div className="p-1 rounded-full bg-stone-100 group-hover:bg-[#5A3859] text-stone-400 group-hover:text-white transition-colors">
-                              <ChevronRight className="h-3.5 w-3.5" />
                             </div>
                           </div>
                         </div>
                       ))}
+                    </div>
+
+                    {/* Footer Row: Total, Address & Delhivery Tracking Snapshot */}
+                    <div className="pt-3 border-t border-stone-100 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs bg-stone-50/50 p-3 rounded-xl">
+                      <div className="space-y-1">
+                        <div className="text-[11px] text-stone-500">
+                          <strong className="text-stone-700 font-bold">Delivery to:</strong>{' '}
+                          {order.customerName || order.shippingAddress?.fullName},{' '}
+                          {order.shippingAddress?.city}, {order.shippingAddress?.state} -{' '}
+                          <span className="font-mono font-bold text-stone-800">{order.shippingAddress?.postalCode}</span>
+                        </div>
+                        {order.trackingNumber && (
+                          <div className="text-[11px] text-stone-600 flex items-center gap-1 font-mono">
+                            <Truck className="h-3 w-3 text-[#5A3859]" />
+                            <span>AWB: <strong className="text-[#5A3859]">{order.trackingNumber}</strong></span>
+                          </div>
+                        )}
+                      </div>
+
+                      <div className="text-right">
+                        <span className="text-[11px] text-stone-500">Total Order Amount: </span>
+                        <span className="font-display font-black text-sm sm:text-base text-[#5A3859]">
+                          ₹{order.totalAmount?.toLocaleString('en-IN')}
+                        </span>
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -2379,36 +2475,72 @@ export default function AccountPage() {
 
         {/* Addresses Tab Content */}
         {activeTab === 'addresses' && (
-          <div className="space-y-6 max-w-3xl">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3.5 bg-white p-4 sm:p-5 rounded-2xl border border-stone-200/90 shadow-xs">
-              <div>
-                <h3 className="font-display text-base sm:text-lg font-bold text-stone-900">Saved Delivery Addresses</h3>
-                <p className="text-xs text-stone-500 mt-0.5">Manage your saved addresses for 1-click express checkout</p>
+          <div className="space-y-6 max-w-4xl">
+            {/* Top Bar with Add Button and Category Tabs (All, Home, Work, Other) */}
+            <div className="bg-white p-4 sm:p-5 rounded-2xl border border-stone-200/90 shadow-xs space-y-4">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3.5">
+                <div>
+                  <h3 className="font-display text-base sm:text-lg font-bold text-stone-900">Saved Delivery Addresses</h3>
+                  <p className="text-xs text-stone-500 mt-0.5">Manage your saved addresses for 1-click express checkout</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setEditingAddr(null)
+                    setShowAddForm(true)
+                    setNewAddr({
+                      title: 'Home',
+                      fullName: user?.name || '',
+                      phone: '',
+                      addressLine: '',
+                      city: '',
+                      state: 'Gujarat',
+                      postalCode: '',
+                      isDefault: savedAddresses.length === 0,
+                    })
+                  }}
+                  className="bg-[#5A3859] hover:bg-[#482b47] text-white text-xs font-bold py-2.5 px-4 rounded-xl flex items-center justify-center gap-1.5 shadow-2xs transition-all cursor-pointer shrink-0 whitespace-nowrap self-start sm:self-auto"
+                >
+                  <Plus className="h-3.5 w-3.5 shrink-0" />
+                  <span className="whitespace-nowrap">Add New Address</span>
+                </button>
               </div>
-              <button
-                type="button"
-                onClick={() => {
-                  setEditingAddr(null)
-                  setShowAddForm(true)
-                  setNewAddr({
-                    title: savedAddresses.length === 0 ? 'Home' : 'Other',
-                    fullName: user?.name || '',
-                    phone: '',
-                    addressLine: '',
-                    city: '',
-                    state: 'Gujarat',
-                    postalCode: '',
-                    isDefault: savedAddresses.length === 0,
-                  })
-                }}
-                className="bg-[#5A3859] hover:bg-[#482b47] text-white text-xs font-bold py-2.5 px-4 rounded-xl flex items-center justify-center gap-1.5 shadow-2xs transition-all cursor-pointer shrink-0 whitespace-nowrap self-start sm:self-auto"
-              >
-                <Plus className="h-3.5 w-3.5 shrink-0" />
-                <span className="whitespace-nowrap">Add New Address</span>
-              </button>
+
+              {/* Category Filter Pills Bar */}
+              <div className="flex items-center gap-2 pt-2 border-t border-stone-100 flex-wrap">
+                {[
+                  { key: 'ALL', label: 'All Addresses', icon: MapPin, count: savedAddresses.length },
+                  { key: 'HOME', label: 'Home', icon: Home, count: savedAddresses.filter((a) => (a.title || 'Other').toUpperCase() === 'HOME').length },
+                  { key: 'WORK', label: 'Work', icon: Briefcase, count: savedAddresses.filter((a) => (a.title || 'Other').toUpperCase() === 'WORK').length },
+                  { key: 'OTHER', label: 'Other', icon: MapPin, count: savedAddresses.filter((a) => (a.title || 'Other').toUpperCase() !== 'HOME' && (a.title || 'Other').toUpperCase() !== 'WORK').length },
+                ].map((tab) => {
+                  const Icon = tab.icon
+                  const isActive = addressCategoryFilter === tab.key
+                  return (
+                    <button
+                      key={tab.key}
+                      type="button"
+                      onClick={() => setAddressCategoryFilter(tab.key)}
+                      className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 border cursor-pointer ${
+                        isActive
+                          ? 'bg-[#5A3859] text-white border-[#5A3859] shadow-2xs'
+                          : 'bg-stone-50 text-stone-600 border-stone-200 hover:bg-stone-100 hover:text-stone-900'
+                      }`}
+                    >
+                      <Icon className={`h-3.5 w-3.5 ${isActive ? 'text-white' : 'text-stone-400'}`} />
+                      <span>{tab.label}</span>
+                      <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-bold ${
+                        isActive ? 'bg-white/20 text-white' : 'bg-stone-200/80 text-stone-600'
+                      }`}>
+                        {tab.count}
+                      </span>
+                    </button>
+                  )
+                })}
+              </div>
             </div>
 
-            {/* Saved Address Cards */}
+            {/* Saved Address Cards List */}
             {savedAddresses.length === 0 ? (
               <div className="bg-white rounded-2xl p-8 text-center border border-stone-200 shadow-2xs space-y-3">
                 <MapPin className="h-10 w-10 text-stone-300 mx-auto" />
@@ -2426,46 +2558,92 @@ export default function AccountPage() {
               </div>
             ) : (
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                {savedAddresses.map((addr) => (
-                  <div
-                    key={addr._id}
-                    className="bg-white p-5 rounded-2xl border border-stone-200/90 shadow-xs hover:shadow-md transition-all flex flex-col justify-between space-y-3 relative group"
-                  >
-                    <div className="space-y-2">
-                      <div className="flex justify-between items-center pb-2.5 border-b border-stone-100">
-                        <span
-                          className={`text-[10.5px] font-black uppercase px-2.5 py-0.5 rounded-md tracking-wider border ${
-                            (addr.title || '').toUpperCase() === 'HOME'
-                              ? 'bg-[#5A3859]/10 text-[#5A3859] border-[#5A3859]/20'
-                              : (addr.title || '').toUpperCase() === 'WORK'
-                              ? 'bg-blue-50 text-blue-700 border-blue-200'
-                              : 'bg-stone-100 text-stone-700 border-stone-200'
-                          }`}
-                        >
-                          {addr.title || 'Other'}
-                        </span>
-                        <button
-                          type="button"
-                          onClick={() => handleStartEdit(addr)}
-                          className="text-xs font-bold text-[#5A3859] hover:text-white bg-[#5A3859]/10 hover:bg-[#5A3859] px-3 py-1 rounded-lg transition-all flex items-center gap-1.5 cursor-pointer shadow-2xs"
-                          title="Edit Address"
-                        >
-                          <Edit2 className="h-3.5 w-3.5" />
-                          <span>Edit</span>
-                        </button>
+                {savedAddresses
+                  .filter((addr) => {
+                    if (addressCategoryFilter === 'ALL') return true
+                    if (addressCategoryFilter === 'HOME') return (addr.title || 'Other').toUpperCase() === 'HOME'
+                    if (addressCategoryFilter === 'WORK') return (addr.title || 'Other').toUpperCase() === 'WORK'
+                    return (addr.title || 'Other').toUpperCase() !== 'HOME' && (addr.title || 'Other').toUpperCase() !== 'WORK'
+                  })
+                  .map((addr) => (
+                    <div
+                      key={addr._id}
+                      className={`bg-white p-5 rounded-2xl border transition-all flex flex-col justify-between space-y-3 relative group shadow-xs hover:shadow-md ${
+                        addr.isDefault ? 'border-[#5A3859]/40 bg-[#FAF7F9]/30 ring-1 ring-[#5A3859]/20' : 'border-stone-200/90'
+                      }`}
+                    >
+                      <div className="space-y-2.5">
+                        {/* Top Badge & Actions Row */}
+                        <div className="flex justify-between items-center pb-2.5 border-b border-stone-100">
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <span
+                              className={`text-[10px] font-black uppercase px-2.5 py-0.5 rounded-md tracking-wider border flex items-center gap-1 ${
+                                (addr.title || '').toUpperCase() === 'HOME'
+                                  ? 'bg-[#5A3859]/10 text-[#5A3859] border-[#5A3859]/20'
+                                  : (addr.title || '').toUpperCase() === 'WORK'
+                                  ? 'bg-blue-50 text-blue-700 border-blue-200'
+                                  : 'bg-stone-100 text-stone-700 border-stone-200'
+                              }`}
+                            >
+                              {(addr.title || '').toUpperCase() === 'HOME' ? '🏠 Home' : (addr.title || '').toUpperCase() === 'WORK' ? '🏢 Work' : '📍 Other'}
+                            </span>
+                            {addr.isDefault && (
+                              <span className="text-[9.5px] font-black uppercase px-2 py-0.5 rounded-md tracking-wider bg-emerald-50 text-emerald-700 border border-emerald-200 flex items-center gap-1">
+                                <Check className="h-3 w-3" />
+                                <span>Default</span>
+                              </span>
+                            )}
+                          </div>
+
+                          <div className="flex items-center gap-1.5">
+                            <button
+                              type="button"
+                              onClick={() => handleStartEdit(addr)}
+                              className="text-xs font-bold text-[#5A3859] hover:text-white bg-[#5A3859]/10 hover:bg-[#5A3859] p-1.5 sm:px-2.5 sm:py-1 rounded-lg transition-all flex items-center gap-1 cursor-pointer shadow-2xs"
+                              title="Edit Address"
+                            >
+                              <Edit2 className="h-3.5 w-3.5" />
+                              <span className="hidden sm:inline">Edit</span>
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleDeleteAddr(addr._id)}
+                              disabled={isDeletingAddr}
+                              className="text-xs font-bold text-rose-600 hover:text-white bg-rose-50 hover:bg-rose-600 p-1.5 sm:px-2.5 sm:py-1 rounded-lg border border-rose-200 hover:border-rose-600 transition-all flex items-center gap-1 cursor-pointer shadow-2xs"
+                              title="Delete Address"
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                              <span className="hidden sm:inline">Delete</span>
+                            </button>
+                          </div>
+                        </div>
+
+                        {/* Recipient details */}
+                        <div className="text-sm font-bold text-stone-900 pt-0.5">{addr.fullName}</div>
+                        <div className="text-xs text-stone-600 leading-relaxed">{addr.addressLine}</div>
+                        <div className="text-xs text-stone-500 font-medium">
+                          {addr.city}, {addr.state} - <strong className="font-mono font-bold text-stone-800">{addr.postalCode}</strong>
+                        </div>
+                        <div className="text-xs text-stone-700 font-mono font-semibold pt-0.5 flex items-center gap-1">
+                          <span className="text-[#5A3859]">📞</span> {addr.phone}
+                        </div>
                       </div>
 
-                      <div className="text-sm font-bold text-stone-900 pt-0.5">{addr.fullName}</div>
-                      <div className="text-xs text-stone-600 leading-relaxed">{addr.addressLine}</div>
-                      <div className="text-xs text-stone-500 font-medium">
-                        {addr.city}, {addr.state} - <strong className="font-mono font-bold text-stone-800">{addr.postalCode}</strong>
-                      </div>
-                      <div className="text-xs text-stone-700 font-mono font-semibold pt-1 flex items-center gap-1">
-                        <span className="text-[#5A3859]">📞</span> {addr.phone}
-                      </div>
+                      {/* Bottom row: Set as Default if not already default */}
+                      {!addr.isDefault && (
+                        <div className="pt-2 border-t border-stone-100 flex justify-end">
+                          <button
+                            type="button"
+                            onClick={() => handleSetDefaultAddress(addr)}
+                            className="text-[11px] font-bold text-stone-500 hover:text-[#5A3859] transition-colors cursor-pointer flex items-center gap-1"
+                          >
+                            <span>Set as default</span>
+                            <ArrowRight className="h-3 w-3" />
+                          </button>
+                        </div>
+                      )}
                     </div>
-                  </div>
-                ))}
+                  ))}
               </div>
             )}
           </div>

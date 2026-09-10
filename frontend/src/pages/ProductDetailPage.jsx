@@ -183,14 +183,33 @@ export default function ProductDetailPage() {
     return shuffled.slice(0, 4)
   }, [allProductsResponse, featuredResponse, slug, product._id, product.id, shuffleKey])
 
+  // Available Sizes for the current product
+  const availableSizes = useMemo(() => {
+    if (Array.isArray(product.sizes) && product.sizes.length > 0) {
+      return product.sizes
+    }
+    if (product.size) {
+      return [product.size]
+    }
+    return ['100ml', '250ml', '500ml']
+  }, [product.sizes, product.size])
+
   // Interactive States
   const [selectedImage, setSelectedImage] = useState(0)
   const [quantity, setQuantity] = useState(1)
-  const [selectedSize, setSelectedSize] = useState('100ml') // '50ml', '100ml', '250ml'
+  const [selectedSize, setSelectedSize] = useState(product.size || '250ml')
   const [isZoomModalOpen, setIsZoomModalOpen] = useState(false)
   const [zoomPos, setZoomPos] = useState({ x: 50, y: 50, show: false })
   const [activeTab, setActiveTab] = useState('overview')
   const [showStickyHeader, setShowStickyHeader] = useState(false)
+
+  useEffect(() => {
+    if (product.size) {
+      setSelectedSize(product.size)
+    } else if (availableSizes.length > 0) {
+      setSelectedSize(availableSizes[0])
+    }
+  }, [product.size, availableSizes])
 
   // Touch & Drag Swipe Handlers for Manual Photo Rotation
   const [touchStartX, setTouchStartX] = useState(null)
@@ -284,6 +303,30 @@ export default function ProductDetailPage() {
       video: null,
     },
   ])
+
+  // Dynamic Rating and Star Breakdown calculation based strictly on actual reviewsList
+  const { calculatedRating, ratingBreakdown, totalReviewsCount } = useMemo(() => {
+    const total = reviewsList.length
+    if (total === 0) {
+      return {
+        calculatedRating: Number(product.rating || 5.0).toFixed(1),
+        ratingBreakdown: [5, 4, 3, 2, 1].map((stars) => ({ stars, percent: 0, count: 0 })),
+        totalReviewsCount: 0,
+      }
+    }
+    const sum = reviewsList.reduce((acc, r) => acc + (Number(r.rating) || 5), 0)
+    const avg = (sum / total).toFixed(1)
+    const breakdown = [5, 4, 3, 2, 1].map((stars) => {
+      const count = reviewsList.filter((r) => Math.round(Number(r.rating) || 5) === stars).length
+      const percent = Math.round((count / total) * 100)
+      return { stars, percent, count }
+    })
+    return {
+      calculatedRating: avg,
+      ratingBreakdown: breakdown,
+      totalReviewsCount: total,
+    }
+  }, [reviewsList, product.rating])
 
   // Review Form & UGC Media States
   const [isReviewModalOpen, setIsReviewModalOpen] = useState(false)
@@ -702,8 +745,8 @@ export default function ProductDetailPage() {
                       <Star key={i} className="w-3 h-3 fill-amber-400 text-amber-400" />
                     ))}
                   </div>
-                  <span className="font-bold text-stone-800 text-xs font-mono">{product.rating || '4.9'}</span>
-                  <span className="text-[11px] text-stone-400 font-medium">({reviewsList.length + 120})</span>
+                  <span className="font-bold text-stone-800 text-xs font-mono">{calculatedRating}</span>
+                  <span className="text-[11px] text-stone-400 font-medium">({totalReviewsCount})</span>
                 </div>
               </div>
 
@@ -738,13 +781,13 @@ export default function ProductDetailPage() {
                 </span>
                 <span className="text-xs font-bold text-[#5A3859] font-mono">{selectedSize}</span>
               </div>
-              <div className="grid grid-cols-3 gap-2">
-                {['50ml', '100ml', '250ml'].map((sz) => (
+              <div className="flex flex-wrap gap-2">
+                {availableSizes.map((sz) => (
                   <button
                     key={sz}
                     type="button"
                     onClick={() => setSelectedSize(sz)}
-                    className={`h-9 rounded-xl text-xs font-bold transition-all flex items-center justify-center cursor-pointer border ${
+                    className={`h-9 px-4 rounded-xl text-xs font-bold transition-all flex items-center justify-center cursor-pointer border ${
                       selectedSize === sz
                         ? 'bg-[#5A3859] text-white border-[#5A3859] shadow-xs'
                         : 'bg-stone-50 text-stone-700 border-stone-200 hover:border-[#5A3859]/50 hover:bg-white'
@@ -834,7 +877,7 @@ export default function ProductDetailPage() {
               { key: 'overview', label: 'Overview' },
               { key: 'ingredients', label: 'Ingredients' },
               { key: 'ritual', label: 'How to Use' },
-              { key: 'reviews', label: `Reviews (${reviewsList.length + 125})` },
+              { key: 'reviews', label: `Reviews (${totalReviewsCount})` },
             ].map((tab) => (
               <button
                 key={tab.key}
@@ -903,7 +946,7 @@ export default function ProductDetailPage() {
               <div className="grid grid-cols-1 md:grid-cols-12 gap-3.5 bg-[#FAF9F6] p-3.5 sm:p-5 rounded-xl border border-stone-200">
                 <div className="md:col-span-4 flex md:flex-col items-center justify-between md:justify-center border-b md:border-b-0 md:border-r border-stone-200 pb-3 md:pb-0 md:pr-4 gap-3">
                   <div className="flex items-center md:flex-col gap-3 md:gap-1 text-left md:text-center">
-                    <span className="text-3xl sm:text-4xl font-black text-stone-900 font-mono">4.9</span>
+                    <span className="text-3xl sm:text-4xl font-black text-stone-900 font-mono">{calculatedRating}</span>
                     <div>
                       <div className="flex items-center text-amber-500 gap-0.5">
                         {[...Array(5)].map((_, i) => (
@@ -911,7 +954,7 @@ export default function ProductDetailPage() {
                         ))}
                       </div>
                       <span className="text-[10px] text-stone-500 block mt-0.5 font-medium">
-                        {reviewsList.length + 125} Verified Reviews
+                        {totalReviewsCount} Verified Reviews
                       </span>
                     </div>
                   </div>
@@ -927,13 +970,7 @@ export default function ProductDetailPage() {
                 </div>
 
                 <div className="md:col-span-8 space-y-1.5 text-xs flex flex-col justify-center">
-                  {[
-                    { stars: 5, percent: 88, count: 112 },
-                    { stars: 4, percent: 9, count: 12 },
-                    { stars: 3, percent: 2, count: 3 },
-                    { stars: 2, percent: 1, count: 1 },
-                    { stars: 1, percent: 0, count: 0 },
-                  ].map((row) => (
+                  {ratingBreakdown.map((row) => (
                     <div key={row.stars} className="flex items-center gap-2.5">
                       <span className="w-9 font-bold text-stone-900 flex items-center gap-1 text-[11px]">
                         {row.stars} <Star className="h-2.5 w-2.5 fill-amber-500 text-amber-500" />

@@ -88,6 +88,8 @@ export default function ProductsPage() {
     gallery: [],
     stock: 15,
     isFeatured: false,
+    size: '250ml',
+    sizes: ['250ml'],
     weight: 250,
     length: 15,
     breadth: 10,
@@ -109,6 +111,8 @@ export default function ProductsPage() {
       gallery: [],
       stock: 15,
       isFeatured: false,
+      size: '250ml',
+      sizes: ['250ml'],
       weight: 250,
       length: 15,
       breadth: 10,
@@ -132,6 +136,8 @@ export default function ProductsPage() {
       gallery: Array.isArray(product.gallery) ? [...product.gallery] : [],
       stock: product.stock ?? 10,
       isFeatured: !!product.isFeatured,
+      size: product.size || '250ml',
+      sizes: Array.isArray(product.sizes) && product.sizes.length > 0 ? [...product.sizes] : [product.size || '250ml'],
       weight: product.weight || 250,
       length: product.dimensions?.length || 15,
       breadth: product.dimensions?.breadth || 10,
@@ -340,6 +346,11 @@ export default function ProductsPage() {
                               <span className="text-[10px] font-mono text-slate-400">
                                 /{p.slug || p._id.slice(-6)}
                               </span>
+                              {p.size && (
+                                <span className="px-2 py-0.5 rounded-md bg-purple-50 text-purple-700 border border-purple-200 font-mono text-[10px] font-bold">
+                                  🧴 {p.size}
+                                </span>
+                              )}
                               <span className="px-2 py-0.5 rounded-md bg-blue-50 text-blue-700 border border-blue-200/80 font-mono text-[10px] font-bold">
                                 📦 {p.weight || 250}g ({p.dimensions?.length || 15}×{p.dimensions?.breadth || 10}×{p.dimensions?.height || 8}cm)
                               </span>
@@ -547,6 +558,50 @@ export default function ProductsPage() {
                     value={formData.stock}
                     onChange={(e) => setFormData({ ...formData, stock: e.target.value })}
                     className="w-full bg-slate-50 border border-slate-200 text-slate-900 text-xs font-mono rounded-xl p-3 focus:outline-none focus:border-blue-600 focus:bg-white"
+                  />
+                </div>
+              </div>
+
+              {/* Product Size / Volume / Net Qty (કદ / સાઇઝ / વજન) */}
+              <div className="p-4 bg-slate-50 border border-slate-200/90 rounded-2xl space-y-3">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <label className="block text-xs font-bold text-slate-800 uppercase tracking-wide">
+                      Product Size / Volume (પ્રોડક્ટ સાઇઝ / નેટ કદ) *
+                    </label>
+                    <p className="text-[11px] text-slate-500 mt-0.5">
+                      દા.ત. 100ml, 200ml, 250ml, 500ml અથવા 50g, 100g, 250g.
+                    </p>
+                  </div>
+                  <span className="text-[11px] font-bold text-blue-700 bg-blue-50 border border-blue-200 px-2 py-0.5 rounded-lg font-mono">
+                    {formData.size || '250ml'}
+                  </span>
+                </div>
+
+                <div className="flex flex-wrap items-center gap-2">
+                  {['50ml', '100ml', '200ml', '250ml', '300ml', '500ml', '50g', '100g', '200g', '250g'].map((sz) => (
+                    <button
+                      key={sz}
+                      type="button"
+                      onClick={() => setFormData({ ...formData, size: sz })}
+                      className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                        formData.size === sz
+                          ? 'bg-blue-600 text-white shadow-xs'
+                          : 'bg-white border border-slate-200 text-slate-700 hover:bg-slate-100'
+                      }`}
+                    >
+                      {sz}
+                    </button>
+                  ))}
+                </div>
+
+                <div className="pt-1">
+                  <input
+                    type="text"
+                    placeholder="Custom Size (e.g. 250ml or 100ml / 50g)"
+                    value={formData.size || ''}
+                    onChange={(e) => setFormData({ ...formData, size: e.target.value })}
+                    className="w-full bg-white border border-slate-200 text-slate-900 text-xs rounded-xl p-3 focus:outline-none focus:border-blue-600 font-bold"
                   />
                 </div>
               </div>

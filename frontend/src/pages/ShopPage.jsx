@@ -498,9 +498,16 @@ export default function ShopPage() {
 
                         {/* Product Info (Compact & Clean) */}
                         <div className="p-2.5 sm:p-3 space-y-1">
-                          <span className="text-[9px] font-bold tracking-wider text-[#5A3859] uppercase block">
-                            {product.category?.name || 'Care'}
-                          </span>
+                          <div className="flex items-center justify-between gap-1">
+                            <span className="text-[9px] font-bold tracking-wider text-[#5A3859] uppercase truncate">
+                              {product.category?.name || 'Care'}
+                            </span>
+                            {product.size && (
+                              <span className="text-[9px] font-mono text-stone-600 font-bold bg-stone-100 px-1.5 py-0.2 rounded shrink-0">
+                                {product.size}
+                              </span>
+                            )}
+                          </div>
                           <Link
                             to={`/product/${product.slug}`}
                             className="block cursor-pointer group/info"
@@ -514,15 +521,20 @@ export default function ShopPage() {
 
                       {/* Footer Actions */}
                       <div className="p-2.5 sm:p-3 pt-0 flex flex-col space-y-2 mt-auto">
-                        <div className="flex items-baseline gap-1.5">
-                          <span className="text-xs sm:text-[13px] font-extrabold text-[#111111] font-mono">
-                            ₹{product.price.toLocaleString('en-IN')}
-                          </span>
-                          {product.compareAtPrice > product.price && (
-                            <span className="text-[10px] line-through text-gray-400 font-normal font-mono">
-                              ₹{product.compareAtPrice.toLocaleString('en-IN')}
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-baseline gap-1.5">
+                            <span className="text-xs sm:text-[13px] font-extrabold text-[#111111] font-mono">
+                              ₹{product.price.toLocaleString('en-IN')}
                             </span>
-                          )}
+                            {product.compareAtPrice > product.price && (
+                              <span className="text-[10px] line-through text-gray-400 font-normal font-mono">
+                                ₹{product.compareAtPrice.toLocaleString('en-IN')}
+                              </span>
+                            )}
+                          </div>
+                          <div className="flex items-center gap-0.5 text-[10px] text-amber-500 font-bold">
+                            <span>★ {product.rating || 5.0}</span>
+                          </div>
                         </div>
 
                         {(() => {

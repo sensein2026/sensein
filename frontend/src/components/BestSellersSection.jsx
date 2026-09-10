@@ -271,8 +271,13 @@ export default function BestSellersSection() {
 
                     {/* Rating & Price row */}
                     <div className="flex items-center justify-between pt-1.5 border-t border-gray-100">
-                      <div className="flex items-center gap-1 text-[11px]">
+                      <div className="flex items-center gap-1.5 text-[11px]">
                         <span className="text-amber-500 font-bold">★ {product.rating || 5.0}</span>
+                        {product.size && (
+                          <span className="text-[9.5px] font-mono text-stone-600 font-bold bg-stone-100 px-1.5 py-0.2 rounded border border-stone-200">
+                            {product.size}
+                          </span>
+                        )}
                         <span className="text-gray-400 text-[9px]">({product.reviewsCount || 120})</span>
                       </div>
 

@@ -66,6 +66,11 @@ const productSchema = new mongoose.Schema(
       type: String,
       default: '',
     },
+    size: {
+      type: String,
+      default: '250ml',
+    },
+    sizes: [{ type: String }],
     weight: {
       type: Number,
       default: 250, // Weight in grams (e.g. 250g)
