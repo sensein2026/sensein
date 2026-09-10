@@ -82,6 +82,14 @@ export const adminApi = api.injectEndpoints({
       }),
       invalidatesTags: ['Order', 'Stats'],
     }),
+    updateOrderAddress: builder.mutation({
+      query: ({ id, ...body }) => ({
+        url: `/orders/${id}/address`,
+        method: 'PUT',
+        body,
+      }),
+      invalidatesTags: ['Order', 'Stats'],
+    }),
     // Users
     getAdminUsers: builder.query({
       query: () => '/admin/users',
@@ -387,6 +395,7 @@ export const {
   useDeleteCategoryMutation,
   useGetAdminOrdersQuery,
   useUpdateOrderStatusMutation,
+  useUpdateOrderAddressMutation,
   useGetAdminUsersQuery,
   useUpdateUserRoleMutation,
   useGetHomepageContentQuery,

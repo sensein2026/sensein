@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom'
 import {
   useGetAdminOrdersQuery,
   useUpdateOrderStatusMutation,
+  useUpdateOrderAddressMutation,
   useCreateShippingMutation,
   useBulkCreateShippingMutation,
   useSyncDelhiveryOrdersMutation,
@@ -38,6 +39,7 @@ import {
   Copy,
   Check,
   RefreshCw,
+  Edit2,
 } from 'lucide-react'
 import SenseinLogo from '@/components/SenseinLogo'
 import ConfirmModal from '@/components/ConfirmModal'
@@ -129,6 +131,7 @@ function printDocument(elementId) {
 export default function OrdersPage() {
   const { data: ordersData, isLoading, isError, refetch } = useGetAdminOrdersQuery()
   const [updateOrderStatus, { isLoading: isUpdating }] = useUpdateOrderStatusMutation()
+  const [updateOrderAddress, { isLoading: isUpdatingAddress }] = useUpdateOrderAddressMutation()
   const [createShipping, { isLoading: isShippingSingle }] = useCreateShippingMutation()
   const [bulkCreateShipping, { isLoading: isBulkShipping }] = useBulkCreateShippingMutation()
   const [syncDelhiveryOrders, { isLoading: isSyncingDelhivery }] = useSyncDelhiveryOrdersMutation()
@@ -179,6 +182,18 @@ export default function OrdersPage() {
   const [trackingModalOrder, setTrackingModalOrder] = useState(null)
   const [isTrackingModalOpen, setIsTrackingModalOpen] = useState(false)
   const [copiedJson, setCopiedJson] = useState(false)
+
+  // Address-Edited Orders Side Panel (drawer)
+  const [isAddressPanelOpen, setIsAddressPanelOpen] = useState(false)
+  const [editingAddressOrder, setEditingAddressOrder] = useState(null)
+  const [addressForm, setAddressForm] = useState({
+    customerName: '',
+    customerPhone: '',
+    addressLine: '',
+    city: '',
+    state: '',
+    postalCode: '',
+  })
 
   const handleDownloadCsv = () => {
     const ordersToExport = filteredOrders && filteredOrders.length > 0 ? filteredOrders : rawOrders
@@ -301,6 +316,7 @@ export default function OrdersPage() {
     { key: 'IN_TRANSIT', label: 'In Transit', statusMatch: ['SHIPPED', 'IN_TRANSIT'] },
     { key: 'DELIVERED', label: 'Delivered', statusMatch: ['DELIVERED'] },
     { key: 'RTO', label: 'RTO', statusMatch: ['CANCELLED', 'RTO'] },
+    { key: 'ADDRESS_EDITED', label: 'Address Edited', statusMatch: [] },
     { key: 'ALL', label: 'All Orders', statusMatch: [] },
   ]
 
@@ -323,7 +339,13 @@ export default function OrdersPage() {
       const matchesStatus =
         !activeTabObj ||
         statusFilter === 'ALL' ||
+        statusFilter === 'ADDRESS_EDITED' ||
         (activeTabObj.statusMatch && activeTabObj.statusMatch.includes(st))
+
+      // Address-Edited tab shows every order that had its delivery address changed
+      const matchesAddressEdited =
+        statusFilter !== 'ADDRESS_EDITED' ||
+        (Array.isArray(o.addressEditHistory) && o.addressEditHistory.length > 0)
 
       const isCod = o.paymentMethod === 'COD'
       const matchesPayment =
@@ -336,7 +358,7 @@ export default function OrdersPage() {
         (channelFilter === 'EKART' && (o.delhivery?.waybill || o.trackingNumber || o.courierPartner)) ||
         (channelFilter === 'DIRECT' && !o.delhivery?.waybill && !o.trackingNumber)
 
-      return matchesSearch && matchesStatus && matchesPayment && matchesChannel
+      return matchesSearch && matchesStatus && matchesAddressEdited && matchesPayment && matchesChannel
     })
   }, [rawOrders, searchTerm, statusFilter, paymentModeFilter, channelFilter])
 
@@ -453,6 +475,9 @@ export default function OrdersPage() {
 
   const getStatusCount = (tabKey) => {
     if (tabKey === 'ALL') return rawOrders.length
+    if (tabKey === 'ADDRESS_EDITED') {
+      return rawOrders.filter((o) => Array.isArray(o.addressEditHistory) && o.addressEditHistory.length > 0).length
+    }
     const tab = filterTabs.find((t) => t.key === tabKey)
     if (!tab || !tab.statusMatch || tab.statusMatch.length === 0) return rawOrders.length
     return rawOrders.filter((o) => tab.statusMatch.includes((o.orderStatus || 'PROCESSING').toUpperCase())).length
@@ -538,6 +563,53 @@ export default function OrdersPage() {
       setTimeout(() => setFeedbackMsg(''), 4000)
     } catch (err) {
       alert(err?.data?.message || err?.message || 'Failed to update order details')
+    }
+  }
+
+  const openEditAddressForm = (order) => {
+    if (!order) return
+    setEditingAddressOrder(order)
+    setAddressForm({
+      customerName: order.customerName || order.shippingAddress?.fullName || '',
+      customerPhone: order.customerPhone || order.shippingAddress?.phone || '',
+      addressLine: order.shippingAddress?.addressLine || '',
+      city: order.shippingAddress?.city || '',
+      state: order.shippingAddress?.state || '',
+      postalCode: order.shippingAddress?.postalCode || '',
+    })
+  }
+
+  const canEditOrderAddress = (order) => {
+    if (!order) return false
+    const s = (order.orderStatus || '').toUpperCase()
+    return !['IN_TRANSIT', 'OUT_FOR_DELIVERY', 'DELIVERED', 'CANCELLED', 'RETURNED', 'RTO'].includes(s)
+  }
+
+  const handleSaveAddress = async (evt) => {
+    evt.preventDefault()
+    if (!editingAddressOrder) return
+    try {
+      const res = await updateOrderAddress({
+        id: editingAddressOrder._id,
+        customerName: addressForm.customerName,
+        customerPhone: addressForm.customerPhone,
+        addressLine: addressForm.addressLine,
+        city: addressForm.city,
+        state: addressForm.state,
+        postalCode: addressForm.postalCode,
+      }).unwrap()
+
+      const updated = res.order || res.data || editingAddressOrder
+
+      if (selectedOrder && selectedOrder._id === editingAddressOrder._id) {
+        setSelectedOrder(updated)
+      }
+      setFeedbackMsg(`Order #${editingAddressOrder.orderNumber || editingAddressOrder._id.slice(-6).toUpperCase()}: delivery address updated.`)
+      setEditingAddressOrder(null)
+      refetch()
+      setTimeout(() => setFeedbackMsg(''), 4000)
+    } catch (err) {
+      alert(err?.data?.message || 'Failed to update delivery address')
     }
   }
 
@@ -639,6 +711,16 @@ export default function OrdersPage() {
 
         {/* Action Buttons */}
         <div className="flex items-center gap-2 flex-wrap">
+          <button
+            type="button"
+            onClick={() => setIsAddressPanelOpen(true)}
+            className="px-3.5 py-2 bg-amber-500 hover:bg-amber-600 text-white font-bold text-xs rounded-xl shadow-xs transition-all flex items-center gap-1.5 cursor-pointer"
+            title="Orders whose delivery address was changed by the customer"
+          >
+            <MapPin className="h-3.5 w-3.5" />
+            <span>Address Edited ({getStatusCount('ADDRESS_EDITED')})</span>
+          </button>
+
           {selectedOrderIds.length > 0 && (
             <>
               {unshippedSelectedCount > 0 && (
@@ -714,6 +796,7 @@ export default function OrdersPage() {
               onClick={() => {
                 setStatusFilter(tab.key)
                 setCurrentPage(1)
+                if (tab.key === 'ADDRESS_EDITED') setIsAddressPanelOpen(true)
               }}
               className={`px-3 sm:px-4 py-2.5 text-xs sm:text-sm font-bold transition-all whitespace-nowrap border-b-2 flex items-center gap-1.5 cursor-pointer ${isActive
                   ? 'border-blue-600 text-blue-600 font-extrabold'
@@ -1545,6 +1628,22 @@ export default function OrdersPage() {
                   {selectedOrder.shippingAddress?.city}, {selectedOrder.shippingAddress?.state} -{' '}
                   <span className="font-bold text-slate-900">{selectedOrder.shippingAddress?.postalCode}</span>
                 </div>
+                {selectedOrder.addressEditHistory?.length > 0 && (
+                  <div className="mt-1.5 inline-flex items-center gap-1 text-[10px] font-bold bg-amber-100 text-amber-800 px-2 py-0.5 rounded-full border border-amber-200">
+                    <MapPin className="h-3 w-3" />
+                    Address edited {selectedOrder.addressEditHistory.length} time(s)
+                  </div>
+                )}
+                {canEditOrderAddress(selectedOrder) && (
+                  <button
+                    type="button"
+                    onClick={() => openEditAddressForm(selectedOrder)}
+                    className="mt-2 px-2.5 py-1 bg-amber-100 hover:bg-amber-200 text-amber-800 font-bold text-[10.5px] rounded-lg flex items-center gap-1.5 transition-colors cursor-pointer"
+                  >
+                    <Edit2 className="h-3 w-3" />
+                    Edit Address
+                  </button>
+                )}
               </div>
             </div>
 
@@ -2242,6 +2341,247 @@ export default function OrdersPage() {
               </button>
             </div>
           </div>
+        </div>,
+        document.body
+      )}
+
+      {/* 12. Address Edited Orders — Right Side Panel (Drawer) */}
+      {isAddressPanelOpen && createPortal(
+        <div className="fixed inset-0 z-[99995] bg-slate-950/50 backdrop-blur-xs">
+          <div className="fixed inset-0" onClick={() => setIsAddressPanelOpen(false)} />
+          <aside className="absolute right-0 top-0 h-full w-full max-w-md bg-white shadow-2xl flex flex-col">
+            {/* Panel Header */}
+            <div className="flex items-center justify-between px-5 py-4 border-b border-slate-200 bg-slate-900 text-white">
+              <div>
+                <h3 className="font-bold text-sm flex items-center gap-2">
+                  <MapPin className="h-4 w-4 text-amber-400" />
+                  Address Edited Orders
+                </h3>
+                <p className="text-[11px] text-slate-400 mt-0.5">
+                  Orders where the customer changed the delivery address before pickup
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsAddressPanelOpen(false)}
+                className="p-1.5 text-slate-300 hover:text-white hover:bg-white/10 rounded-lg transition-colors cursor-pointer"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            {/* Panel Body */}
+            <div className="flex-1 overflow-y-auto p-4 space-y-3 bg-slate-50/70">
+              {rawOrders.filter((o) => Array.isArray(o.addressEditHistory) && o.addressEditHistory.length > 0).length === 0 ? (
+                <div className="text-center py-16 px-6">
+                  <div className="w-14 h-14 bg-amber-100 text-amber-600 rounded-2xl flex items-center justify-center mx-auto mb-3">
+                    <MapPin className="h-7 w-7" />
+                  </div>
+                  <p className="text-sm font-bold text-slate-700">No address edits yet</p>
+                  <p className="text-xs text-slate-500 mt-1 leading-relaxed">
+                    When a customer updates an order's delivery address before pickup, it will appear here for review.
+                  </p>
+                </div>
+              ) : (
+                rawOrders
+                  .filter((o) => Array.isArray(o.addressEditHistory) && o.addressEditHistory.length > 0)
+                  .map((o) => {
+                    const lastEdit = o.addressEditHistory[0] || {}
+                    const prevAddr = lastEdit.previous || {}
+                    const newAddr = lastEdit.updated || o.shippingAddress || {}
+                    const external = o.trackingNumber || o.delhivery?.waybill
+                      ? `https://www.delhivery.com/track/package/${o.trackingNumber || o.delhivery?.waybill}`
+                      : ''
+                    return (
+                      <div key={o._id} className="bg-white rounded-2xl border border-slate-200 shadow-xs p-4 space-y-2.5">
+                        <div className="flex items-start justify-between gap-2">
+                          <div>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setIsAddressPanelOpen(false)
+                                openOrderModal(o)
+                              }}
+                              className="font-mono text-blue-700 font-bold text-sm hover:underline cursor-pointer"
+                            >
+                              #{o.orderNumber || o._id?.toUpperCase()}
+                            </button>
+                            <span className={`ml-2 px-2 py-0.5 rounded-full text-[9.5px] font-mono font-bold uppercase border ${getStatusBadge(o.orderStatus)}`}>
+                              {o.orderStatus || 'PROCESSING'}
+                            </span>
+                          </div>
+                          <span className="text-[10px] font-mono text-slate-400 shrink-0">
+                            {new Date(lastEdit.updatedAt || o.addressUpdatedAt || Date.now()).toLocaleString('en-IN')}
+                          </span>
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-2.5 text-[11px]">
+                          <div className="bg-rose-50/70 border border-rose-100 rounded-xl p-2.5">
+                            <div className="text-[9px] font-bold uppercase tracking-wider text-rose-500 mb-1">Previous Address</div>
+                            <div className="font-bold text-slate-800 truncate">{prevAddr.fullName || o.customerName}</div>
+                            <div className="text-slate-600 leading-snug mt-0.5">
+                              {prevAddr.addressLine || o.shippingAddress?.addressLine}
+                            </div>
+                            <div className="text-slate-600">
+                              {prevAddr.city || o.shippingAddress?.city}, {prevAddr.state || o.shippingAddress?.state}
+                            </div>
+                            <div className="font-mono text-slate-500">{prevAddr.postalCode || o.shippingAddress?.postalCode}</div>
+                          </div>
+                          <div className="bg-emerald-50/70 border border-emerald-100 rounded-xl p-2.5">
+                            <div className="text-[9px] font-bold uppercase tracking-wider text-emerald-600 mb-1">Updated Address</div>
+                            <div className="font-bold text-slate-800 truncate">{newAddr.fullName || o.customerName}</div>
+                            <div className="text-slate-600 leading-snug mt-0.5">{newAddr.addressLine}</div>
+                            <div className="text-slate-600">{newAddr.city}, {newAddr.state}</div>
+                            <div className="font-mono text-slate-500">{newAddr.postalCode}</div>
+                          </div>
+                        </div>
+
+                        <div className="flex items-center justify-between pt-1 border-t border-slate-100">
+                          <span className="text-[10px] text-slate-400 flex items-center gap-1">
+                            <Clock className="h-3 w-3" />
+                            by {lastEdit.updatedBy || 'Customer'}
+                          </span>
+                          <div className="flex items-center gap-1.5">
+                            {canEditOrderAddress(o) && (
+                              <button
+                                type="button"
+                                onClick={() => openEditAddressForm(o)}
+                                className="px-2.5 py-1 bg-amber-100 hover:bg-amber-200 text-amber-800 font-bold text-[10.5px] rounded-lg flex items-center gap-1.5 transition-colors cursor-pointer"
+                              >
+                                <Edit2 className="h-3 w-3" />
+                                Edit Again
+                              </button>
+                            )}
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setIsAddressPanelOpen(false)
+                                openOrderModal(o)
+                              }}
+                              className="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-[10.5px] rounded-lg flex items-center gap-1 transition-colors cursor-pointer"
+                            >
+                              View
+                              <ChevronRight className="h-3 w-3" />
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    )
+                  })
+              )}
+            </div>
+          </aside>
+        </div>,
+        document.body
+      )}
+
+      {/* 13. Admin Edit Delivery Address Modal */}
+      {editingAddressOrder && createPortal(
+        <div className="fixed inset-0 z-[99996] flex items-center justify-center p-4 bg-slate-950/85 backdrop-blur-md">
+          <div className="fixed inset-0" onClick={() => setEditingAddressOrder(null)} />
+          <form
+            onSubmit={handleSaveAddress}
+            className="relative z-10 w-full max-w-lg bg-white border border-slate-200 rounded-3xl p-6 space-y-4 shadow-2xl max-h-[90vh] overflow-y-auto"
+          >
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+              <div>
+                <h3 className="font-bold text-slate-900 flex items-center gap-2">
+                  <Edit2 className="h-4 w-4 text-amber-600" />
+                  Edit Delivery Address
+                </h3>
+                <p className="text-[11px] text-slate-500 mt-0.5">
+                  Order #{editingAddressOrder.orderNumber || editingAddressOrder._id?.toUpperCase()} — editable before pickup
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setEditingAddressOrder(null)}
+                className="p-1.5 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-lg transition-colors cursor-pointer"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+              <div className="space-y-1">
+                <label className="font-bold text-slate-600">Full Name</label>
+                <input
+                  type="text"
+                  value={addressForm.customerName}
+                  onChange={(e) => setAddressForm({ ...addressForm, customerName: e.target.value })}
+                  className="w-full px-3 py-2 rounded-lg border border-slate-200 focus:border-amber-500 focus:ring-1 focus:ring-amber-500 outline-none text-slate-900"
+                />
+              </div>
+              <div className="space-y-1">
+                <label className="font-bold text-slate-600">Phone</label>
+                <input
+                  type="text"
+                  value={addressForm.customerPhone}
+                  onChange={(e) => setAddressForm({ ...addressForm, customerPhone: e.target.value })}
+                  className="w-full px-3 py-2 rounded-lg border border-slate-200 focus:border-amber-500 focus:ring-1 focus:ring-amber-500 outline-none text-slate-900"
+                />
+              </div>
+              <div className="space-y-1 col-span-full">
+                <label className="font-bold text-slate-600">Address Line</label>
+                <input
+                  type="text"
+                  required
+                  value={addressForm.addressLine}
+                  onChange={(e) => setAddressForm({ ...addressForm, addressLine: e.target.value })}
+                  className="w-full px-3 py-2 rounded-lg border border-slate-200 focus:border-amber-500 focus:ring-1 focus:ring-amber-500 outline-none text-slate-900"
+                />
+              </div>
+              <div className="space-y-1">
+                <label className="font-bold text-slate-600">City</label>
+                <input
+                  type="text"
+                  required
+                  value={addressForm.city}
+                  onChange={(e) => setAddressForm({ ...addressForm, city: e.target.value })}
+                  className="w-full px-3 py-2 rounded-lg border border-slate-200 focus:border-amber-500 focus:ring-1 focus:ring-amber-500 outline-none text-slate-900"
+                />
+              </div>
+              <div className="space-y-1">
+                <label className="font-bold text-slate-600">State</label>
+                <input
+                  type="text"
+                  required
+                  value={addressForm.state}
+                  onChange={(e) => setAddressForm({ ...addressForm, state: e.target.value })}
+                  className="w-full px-3 py-2 rounded-lg border border-slate-200 focus:border-amber-500 focus:ring-1 focus:ring-amber-500 outline-none text-slate-900"
+                />
+              </div>
+              <div className="space-y-1 col-span-full">
+                <label className="font-bold text-slate-600">PIN Code</label>
+                <input
+                  type="text"
+                  required
+                  pattern="[0-9]{6}"
+                  value={addressForm.postalCode}
+                  onChange={(e) => setAddressForm({ ...addressForm, postalCode: e.target.value })}
+                  className="w-full px-3 py-2 rounded-lg border border-slate-200 focus:border-amber-500 focus:ring-1 focus:ring-amber-500 outline-none text-slate-900"
+                />
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-2.5 pt-2 border-t border-slate-100">
+              <button
+                type="button"
+                onClick={() => setEditingAddressOrder(null)}
+                className="px-4 py-2 border border-slate-200 text-slate-600 hover:bg-slate-50 rounded-xl text-xs font-bold cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                disabled={isUpdatingAddress}
+                className="px-4 py-2 bg-amber-500 hover:bg-amber-600 disabled:opacity-50 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 cursor-pointer"
+              >
+                {isUpdatingAddress ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}
+                {isUpdatingAddress ? 'Saving...' : 'Save Address'}
+              </button>
+            </div>
+          </form>
         </div>,
         document.body
       )}

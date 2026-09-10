@@ -257,8 +257,9 @@ export default function TrackOrderPage() {
                   : 'Awaiting Dispatch')
               const isCancelled = order.orderStatus === 'CANCELLED' || order.orderStatus === 'PAYMENT_FAILED'
               const isDelivered = order.orderStatus === 'DELIVERED'
-              const isDispatched = ['SHIPPED', 'IN_TRANSIT', 'OUT_FOR_DELIVERY', 'DELIVERED'].includes(order.orderStatus)
-              const canEditAddress = !isDispatched && !isCancelled
+              const lockEvenBeforeDelivery = ['IN_TRANSIT', 'OUT_FOR_DELIVERY', 'DELIVERED'].includes(order.orderStatus)
+              // Address can still be edited pre-pickup, including when a Delhivery SHIPPED booking exists
+              const canEditAddress = !lockEvenBeforeDelivery && !isCancelled && order.orderStatus !== 'RETURNED' && order.orderStatus !== 'RTO'
 
               const estDateStr = order.estimatedDeliveryDate
                 ? new Date(order.estimatedDeliveryDate).toLocaleDateString('en-IN', {

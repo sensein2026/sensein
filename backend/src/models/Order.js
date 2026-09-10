@@ -172,6 +172,30 @@ const orderSchema = new mongoose.Schema(
         description: { type: String },
       },
     ],
+    // Address edit tracking (powers admin "Edited Address" side panel)
+    addressUpdatedAt: { type: Date },
+    addressEditHistory: [
+      {
+        updatedAt: { type: Date, default: Date.now },
+        updatedBy: { type: String, default: 'Customer' },
+        previous: {
+          fullName: { type: String },
+          phone: { type: String },
+          addressLine: { type: String },
+          city: { type: String },
+          state: { type: String },
+          postalCode: { type: String },
+        },
+        updated: {
+          fullName: { type: String },
+          phone: { type: String },
+          addressLine: { type: String },
+          city: { type: String },
+          state: { type: String },
+          postalCode: { type: String },
+        },
+      },
+    ],
     invoiceNumber: { type: String },
     deliveryOtp: { type: String },
     deliveryRider: {

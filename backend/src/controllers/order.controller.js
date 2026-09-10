@@ -584,7 +584,17 @@ export const updateOrderStatus = async (req, res, next) => {
         // 1. Cancel in Delhivery API automatically to release courier hold
         const waybill = order.trackingNumber || order.delhivery?.waybill
         if (waybill) {
-          await cancelDelhiveryShipment(waybill).catch(() => {})
+          const cancelResult = await cancelDelhiveryShipment(waybill).catch(() => null)
+          if (cancelResult && order.delhivery) {
+            order.delhivery.status = 'CANCELLED'
+            order.delhivery.assignmentStatus = 'CANCELLED'
+            order.delhivery.statusMessage = cancelResult.message || 'Delhivery shipment cancelled'
+            desc = `Order has been cancelled. ${cancelResult.message || 'Delhivery shipment cancelled.'}`
+            title = 'Order Cancelled — Delhivery Shipment Revoked'
+          }
+        } else {
+          desc = 'Order has been cancelled.'
+          title = 'Order Cancelled'
         }
 
         // 2. Restore Product Stock
@@ -721,29 +731,46 @@ export const cancelUserOrder = async (req, res, next) => {
       return res.status(404).json({ success: false, message: 'Order not found' })
     }
 
-    // Check if order can be cancelled (only before SHIPPED / IN_TRANSIT / DELIVERED)
-    if (['SHIPPED', 'IN_TRANSIT', 'OUT_FOR_DELIVERY', 'DELIVERED'].includes(order.orderStatus)) {
+    // Orders that can NEVER be cancelled (already delivered / already in return flow)
+    if (['DELIVERED', 'RETURNED', 'RTO', 'CANCELLED'].includes(order.orderStatus)) {
       return res.status(400).json({
         success: false,
-        message: 'This order is already dispatched/shipped via Delhivery and cannot be cancelled directly. You can request a return after delivery.',
+        message: order.orderStatus === 'CANCELLED'
+          ? 'Order is already cancelled'
+          : 'This order cannot be cancelled anymore. It has already been delivered or is in the return (RTO) flow.',
       })
     }
 
-    if (order.orderStatus === 'CANCELLED') {
-      return res.status(400).json({ success: false, message: 'Order is already cancelled' })
-    }
+    // Pre-pickup: cancel directly. Post-pickup (SHIPPED/IN_TRANSIT/OUT_FOR_DELIVERY):
+    // Delhivery shipment booking is revoked. If the package was physically picked up,
+    // Delhivery treats it as a return-to-origin (RTO) pickup.
+    const wasPickedUp = ['SHIPPED', 'IN_TRANSIT', 'OUT_FOR_DELIVERY'].includes(order.orderStatus)
 
     order.orderStatus = 'CANCELLED'
 
-    // Cancel in Delhivery if booked
+    // Cancel in Delhivery if booked (automatically releases hold / reverses pickup)
     const waybill = order.trackingNumber || order.delhivery?.waybill
+    let delhiveryCancelResult = null
     if (waybill) {
-      await cancelDelhiveryShipment(waybill).catch(() => {})
+      try {
+        delhiveryCancelResult = await cancelDelhiveryShipment(waybill)
+      } catch (cancelErr) {
+        logger.warn({ err: cancelErr.message }, 'Delhivery cancel failed during user order cancellation')
+      }
+    }
+
+    order.delhivery = {
+      ...(order.delhivery || {}),
+      status: 'CANCELLED',
+      assignmentStatus: 'CANCELLED',
+      statusMessage: delhiveryCancelResult
+        ? (delhiveryCancelResult.message || 'Delhivery shipment cancelled')
+        : 'Delhivery shipment cancelled',
     }
 
     // Restore stock
     for (const itm of order.items || []) {
-      if (itm.product) {
+      if (itm.product && !wasPickedUp) {
         await Product.findByIdAndUpdate(itm.product, {
           $inc: { stock: itm.quantity || 1 },
         }).catch(() => {})
@@ -752,17 +779,21 @@ export const cancelUserOrder = async (req, res, next) => {
 
     order.trackingHistory.unshift({
       status: 'CANCELLED',
-      title: 'Order Cancelled by Customer',
+      title: wasPickedUp ? 'Order Cancelled — Return to Origin Initiated' : 'Order Cancelled by Customer',
       location: 'Customer Self-Service Portal',
       timestamp: new Date(),
-      description: `Cancellation requested: ${reason}. Product stock restored.`,
+      description: wasPickedUp
+        ? `Cancellation requested: ${reason}. Delhivery reverse pickup (RTO) will be arranged for waybill #${waybill || 'N/A'}.`
+        : `Cancellation requested: ${reason}. Delhivery pickup booking revoked and product stock restored.`,
     })
 
     await order.save()
 
     res.json({
       success: true,
-      message: 'Order cancelled successfully. If paid online, your refund will be processed.',
+      message: wasPickedUp
+        ? 'Order cancelled successfully. As the package was already picked up by Delhivery, a return-to-origin (reverse pickup) has been initiated. If paid online, your refund will be processed after the package is received back.'
+        : 'Order cancelled successfully. If paid online, your refund will be processed.',
       data: order,
     })
   } catch (error) {
@@ -790,14 +821,19 @@ export const updateOrderAddress = async (req, res, next) => {
       return res.status(404).json({ success: false, message: 'Order not found' })
     }
 
-    // Check if order has already been picked up or dispatched
-    const dispatchedStatuses = ['SHIPPED', 'IN_TRANSIT', 'OUT_FOR_DELIVERY', 'DELIVERED', 'CANCELLED']
-    if (dispatchedStatuses.includes(order.orderStatus)) {
+    // Check if the order has been physically picked up / cannot be re-routed
+    // NOTE: SHIPPED is allowed — a Delhivery booking may exist but if the package
+    // has NOT been physically picked up, the address can still be corrected.
+    const lockedStatuses = ['IN_TRANSIT', 'OUT_FOR_DELIVERY', 'DELIVERED', 'CANCELLED', 'RETURNED', 'RTO']
+    if (lockedStatuses.includes(order.orderStatus)) {
       return res.status(400).json({
         success: false,
-        message: 'Delivery address cannot be updated because the shipment is already dispatched / picked up.',
+        message: 'Delivery address cannot be updated because the shipment has already been picked up / is out for delivery.',
       })
     }
+
+    // Snapshot the previous address before overwriting (for admin review panel)
+    const previousAddress = order.shippingAddress ? { ...order.shippingAddress } : null
 
     if (customerName) order.customerName = customerName.trim()
     if (customerPhone) order.customerPhone = customerPhone.trim()
@@ -811,11 +847,28 @@ export const updateOrderAddress = async (req, res, next) => {
       state: state ? state.trim() : order.shippingAddress?.state,
       postalCode: postalCode ? postalCode.trim() : order.shippingAddress?.postalCode,
     }
+    order.addressUpdatedAt = new Date()
+
+    // Record address-edit history (powers the admin "Edited Address" side panel)
+    if (!Array.isArray(order.addressEditHistory)) order.addressEditHistory = []
+    order.addressEditHistory.unshift({
+      updatedAt: new Date(),
+      updatedBy: req.user?.role === 'ADMIN' ? 'Admin' : req.user?.name || 'Customer',
+      previous: {
+        fullName: previousAddress?.fullName,
+        phone: previousAddress?.phone,
+        addressLine: previousAddress?.addressLine,
+        city: previousAddress?.city,
+        state: previousAddress?.state,
+        postalCode: previousAddress?.postalCode,
+      },
+      updated: { ...order.shippingAddress },
+    })
 
     order.trackingHistory.unshift({
       status: order.orderStatus,
       title: 'Delivery Address Updated',
-      description: `Delivery address updated by customer to ${order.shippingAddress.city}, ${order.shippingAddress.state} - ${order.shippingAddress.postalCode}.`,
+      description: `Delivery address updated by ${req.user?.role === 'ADMIN' ? 'admin' : 'customer'} to ${order.shippingAddress.addressLine}, ${order.shippingAddress.city}, ${order.shippingAddress.state} - ${order.shippingAddress.postalCode}.`,
       location: order.shippingAddress.city || 'Sensein Operations',
       timestamp: new Date(),
     })

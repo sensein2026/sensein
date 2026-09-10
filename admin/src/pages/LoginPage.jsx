@@ -3,7 +3,7 @@ import { useDispatch } from 'react-redux'
 import { useNavigate } from 'react-router-dom'
 import { useLoginAdminMutation } from '@/features/adminApi'
 import { setCredentials } from '@/store/authSlice'
-import { Shield, Lock, Mail, Loader2, Sparkles, KeyRound } from 'lucide-react'
+import { Shield, Lock, Mail, Loader2, Sparkles } from 'lucide-react'
 import SenseinLogo from '@/components/SenseinLogo'
 
 export default function LoginPage() {
@@ -11,8 +11,8 @@ export default function LoginPage() {
   const navigate = useNavigate()
   const [loginAdmin, { isLoading }] = useLoginAdminMutation()
 
-  const [email, setEmail] = useState('mindnextarticle@gmail.com')
-  const [password, setPassword] = useState('AdminPassword123!')
+  const [email, setEmail] = useState('')
+  const [password, setPassword] = useState('')
   const [errorMsg, setErrorMsg] = useState('')
 
   const handleLogin = async (e) => {
@@ -31,10 +31,7 @@ export default function LoginPage() {
     }
   }
 
-  const fillDefaultCredentials = () => {
-    setEmail('mindnextarticle@gmail.com')
-    setPassword('AdminPassword123!')
-  }
+  
 
   return (
     <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4 relative overflow-hidden">
@@ -106,16 +103,7 @@ export default function LoginPage() {
           </button>
         </form>
 
-        <div className="mt-6 pt-4 border-t border-slate-100 flex flex-col items-center gap-2">
-          <button
-            type="button"
-            onClick={fillDefaultCredentials}
-            className="text-xs font-bold text-blue-600 hover:text-blue-700 hover:underline flex items-center gap-1.5 transition-colors cursor-pointer"
-          >
-            <KeyRound className="h-3.5 w-3.5" />
-            <span>Auto-fill Admin Credentials</span>
-          </button>
-        </div>
+        
       </div>
     </div>
   )

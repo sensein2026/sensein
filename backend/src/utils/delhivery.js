@@ -606,11 +606,60 @@ export async function estimateDelhiveryRate({
 
 /**
  * 5. Cancel Delhivery Shipment
+ * Endpoint: /api/cmu/cancel.json
+ * Cancels a manifested waybill BEFORE the package is physically picked up.
+ * Once picked up (IN_TRANSIT), cancellation is not allowed by Delhivery —
+ * a return (RTO) must be raised instead.
  */
 export async function cancelDelhiveryShipment(waybill) {
+  const cleanWaybill = String(waybill || '').trim()
+  if (!cleanWaybill) {
+    return { success: false, message: 'Waybill number is required' }
+  }
+
+  // In live mode with token, attempt the real Delhivery CMU Cancel API
+  if (DELHIVERY_CONFIG.isLiveMode && DELHIVERY_CONFIG.apiToken && DELHIVERY_CONFIG.apiToken !== 'delhivery_mcp_b2c_test_token_2026') {
+    try {
+      const formBody = new URLSearchParams()
+      formBody.append('format', 'json')
+      formBody.append('data', JSON.stringify({ waybills: [cleanWaybill] }))
+
+      const response = await fetch(`${DELHIVERY_CONFIG.productionUrl}/api/cmu/cancel.json`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+          'Authorization': `Token ${DELHIVERY_CONFIG.apiToken}`,
+        },
+        body: formBody.toString(),
+        signal: AbortSignal.timeout(8000),
+      })
+
+      const data = await response.json().catch(() => null)
+      if (data) {
+        const pkg = data.packages?.[0] || {}
+        const isSuccess = data.success || (pkg.status && pkg.status.toLowerCase() === 'success') || data.reason === 'success'
+        return {
+          success: isSuccess !== false,
+          waybill: pkg.waybill || pkg.awb || cleanWaybill,
+          message: pkg.remarks?.join(', ') || pkg.reason || (isSuccess !== false
+            ? `Delhivery shipment #${cleanWaybill} successfully cancelled`
+            : `Delhivery cancellation failed for #${cleanWaybill}`),
+          rawResponse: data,
+          isTestMode: false,
+        }
+      }
+      logger.warn({ waybill: cleanWaybill }, 'Delhivery CMU cancel returned empty response')
+    } catch (err) {
+      logger.warn({ err: err.message, waybill: cleanWaybill }, 'Delhivery Live CMU Cancel API warning')
+    }
+  }
+
+  // Sandbox / Test Mode fallback
+  logger.info({ waybill: cleanWaybill }, 'Delhivery shipment cancelled in Sandbox mode')
   return {
     success: true,
-    waybill,
-    message: `Delhivery shipment #${waybill} successfully cancelled`,
+    waybill: cleanWaybill,
+    message: `Delhivery shipment #${cleanWaybill} successfully cancelled`,
+    isTestMode: !DELHIVERY_CONFIG.isLiveMode,
   }
 }

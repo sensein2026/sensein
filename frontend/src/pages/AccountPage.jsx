@@ -176,8 +176,8 @@ export default function AccountPage() {
     if (!orderToPrint) return
     setPrintingOrder(orderToPrint)
 
-    // Wait for the hidden print div to render
-    await new Promise((resolve) => setTimeout(resolve, 200))
+    // Wait for the hidden print div to render & fonts/images to paint
+    await new Promise((resolve) => setTimeout(resolve, 900))
 
     const element = document.getElementById('sensein-invoice-print-area')
     if (!element) {
@@ -193,9 +193,15 @@ export default function AccountPage() {
       margin: [6, 6, 6, 6],
       filename: `Sensein_Tax_Invoice_${orderNum}.pdf`,
       image: { type: 'jpeg', quality: 0.98 },
-      html2canvas: { scale: 2, useCORS: true, logging: false },
+      html2canvas: {
+        scale: 2,
+        useCORS: true,
+        logging: false,
+        backgroundColor: '#ffffff',
+        windowWidth: element.scrollWidth,
+      },
       jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
-      pagebreak: { mode: 'avoid-all' },
+      pagebreak: { mode: ['avoid-all', 'css', 'legacy'] },
     }
 
     try {
@@ -527,7 +533,15 @@ export default function AccountPage() {
         <div
           id="sensein-invoice-print-area"
           className="print:block print:w-full print:m-0 print:p-0"
-          style={{ position: 'absolute', left: '-9999px', top: 0, width: '210mm', background: 'white' }}
+          style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            width: '210mm',
+            background: 'white',
+            zIndex: -9999,
+            pointerEvents: 'none',
+          }}
         >
           <DelhiveryTaxInvoice order={printingOrder} sellerConfig={sellerConfig} />
           <div className="print:fixed print:bottom-0 print:left-0 print:w-full flex justify-start items-center text-[10px] text-neutral-500 font-mono px-1">
@@ -660,7 +674,7 @@ export default function AccountPage() {
             <div className="space-y-1.5 text-xs">
               <div className="flex items-center justify-between">
                 <span className="text-[10px] uppercase font-bold text-stone-400">Delivery Address</span>
-                {!['SHIPPED', 'IN_TRANSIT', 'OUT_FOR_DELIVERY', 'DELIVERED', 'CANCELLED'].includes(
+                {!['IN_TRANSIT', 'OUT_FOR_DELIVERY', 'DELIVERED', 'CANCELLED', 'RETURNED', 'RTO'].includes(
                   selectedOrderModal.orderStatus
                 ) && (
                   <button
@@ -735,7 +749,7 @@ export default function AccountPage() {
 
             {/* Action Buttons Inside Modal (Cancel Order + Track Order) */}
             <div className="pt-3 border-t border-stone-200/80 flex items-center gap-2.5">
-              {['PENDING', 'PROCESSING', 'CONFIRMED'].includes(selectedOrderModal.orderStatus) && (
+              {!['DELIVERED', 'CANCELLED', 'RETURNED', 'RTO', 'PAYMENT_FAILED'].includes(selectedOrderModal.orderStatus) && (
                 <button
                   type="button"
                   onClick={() => handleCancelOrder(selectedOrderModal._id, selectedOrderModal.orderNumber)}
@@ -771,7 +785,7 @@ export default function AccountPage() {
                   <span>Edit Order Delivery Address</span>
                 </h3>
                 <p className="text-[11px] text-stone-500">
-                  Order #{editingOrderAddress.orderNumber} (Before pickup update)
+                  Order #{editingOrderAddress.orderNumber} (Editable before Delhivery pickup)
                 </p>
               </div>
               <button
