@@ -5,6 +5,10 @@
       "destination": "https://sensein-backend.onrender.com/api/:path*"
     },
     {
+      "source": "/auth/:path*",
+      "destination": "https://sensein-backend.onrender.com/api/auth/:path*"
+    },
+    {
       "source": "/(.*)",
       "destination": "/"
     }
