@@ -658,26 +658,27 @@ export default function ShopPage() {
         </div>
       </div>
 
-      {/* Mobile Filters Slide-in Drawer */}
+      {/* Direct Mobile Filters Modal (Centered, Instant, No Jumping) */}
       <AnimatePresence>
         {isMobileFilterOpen && (
-          <div className="fixed inset-0 z-50 flex items-end overflow-hidden">
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 overflow-hidden">
             {/* Backdrop */}
             <motion.div
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
+              transition={{ duration: 0.15 }}
               onClick={() => setIsMobileFilterOpen(false)}
               className="fixed inset-0 bg-black/65 backdrop-blur-xs"
             />
 
-            {/* Bottom Sheet Drawer */}
+            {/* Direct Modal Container */}
             <motion.div
-              initial={{ y: '100%' }}
-              animate={{ y: 0 }}
-              exit={{ y: '100%' }}
-              transition={{ type: 'spring', damping: 25, stiffness: 300 }}
-              className="relative w-full max-h-[88dvh] sm:max-h-[85vh] bg-white rounded-t-3xl p-4 sm:p-5 flex flex-col shadow-2xl z-10 space-y-3.5 overflow-hidden overscroll-contain self-end"
+              initial={{ opacity: 0, scale: 0.96 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.96 }}
+              transition={{ duration: 0.15 }}
+              className="relative w-full max-w-md bg-white rounded-2xl p-4 sm:p-5 flex flex-col shadow-2xl z-10 space-y-3.5 overflow-hidden overscroll-contain max-h-[88dvh] sm:max-h-[85vh] my-auto border border-stone-200"
             >
               {/* Header */}
               <div className="flex justify-between items-center pb-3 border-b border-stone-100 shrink-0">
@@ -830,7 +831,7 @@ export default function ShopPage() {
               </div>
 
               {/* Bottom Results Button */}
-              <div className="pt-2.5 border-t border-stone-100 shrink-0 pb-safe">
+              <div className="pt-2.5 border-t border-stone-100 shrink-0">
                 <button
                   type="button"
                   onClick={() => setIsMobileFilterOpen(false)}
@@ -873,23 +874,24 @@ export default function ShopPage() {
         </button>
       </div>
 
-      {/* Mobile Sort Bottom Sheet */}
+      {/* Direct Mobile Sort Modal (Centered, Instant, No Jumping) */}
       <AnimatePresence>
         {isMobileSortOpen && (
-          <div className="fixed inset-0 z-50 flex items-end overflow-hidden">
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 overflow-hidden">
             <motion.div
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
+              transition={{ duration: 0.15 }}
               onClick={() => setIsMobileSortOpen(false)}
               className="fixed inset-0 bg-black/65 backdrop-blur-xs"
             />
             <motion.div
-              initial={{ y: '100%' }}
-              animate={{ y: 0 }}
-              exit={{ y: '100%' }}
-              transition={{ type: 'spring', damping: 28, stiffness: 350 }}
-              className="relative w-full max-h-[85dvh] bg-white rounded-t-2xl p-5 shadow-2xl z-10 space-y-4 overscroll-contain pb-safe self-end"
+              initial={{ opacity: 0, scale: 0.96 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.96 }}
+              transition={{ duration: 0.15 }}
+              className="relative w-full max-w-md bg-white rounded-2xl p-4 sm:p-5 shadow-2xl z-10 space-y-4 overscroll-contain my-auto border border-stone-200 max-h-[85dvh]"
             >
               <div className="flex items-center justify-between pb-3 border-b border-stone-200">
                 <div className="flex items-center gap-2">

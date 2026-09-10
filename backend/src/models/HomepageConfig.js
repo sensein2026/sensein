@@ -29,6 +29,7 @@ const concernCardSchema = new mongoose.Schema({
 
 const videoReelSchema = new mongoose.Schema({
   id: { type: String, default: () => `reel-${Date.now()}` },
+  category: { type: String, default: '' },
   title: { type: String, default: '' },
   subtitle: { type: String, default: '' },
   productName: { type: String, default: '' },

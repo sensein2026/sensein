@@ -5,6 +5,7 @@ import { ChevronLeft, ChevronRight, Sparkles, ShoppingBag, Star, Volume2, Volume
 const defaultVideoCards = [
   {
     id: 1,
+    category: 'Hair Repair Shampoo',
     title: 'Color Pro Combo',
     subtitle: 'Repair & protection for color-treated hair',
     productName: 'SENSEIN® Damage Repair Shampoo',
@@ -17,6 +18,7 @@ const defaultVideoCards = [
   },
   {
     id: 2,
+    category: 'Hair Serum & Gloss',
     title: 'Argan Combo',
     subtitle: 'Smoothness, shine & frizz control',
     productName: 'SENSEIN® Anti-Frizz Gloss Serum',
@@ -29,6 +31,7 @@ const defaultVideoCards = [
   },
   {
     id: 3,
+    category: 'Deep Conditioning Mask',
     title: 'Hydro-Repair Mask',
     subtitle: 'Deep hydration & cuticle seal',
     productName: 'SENSEIN® Intense Repair Mask',
@@ -41,6 +44,7 @@ const defaultVideoCards = [
   },
   {
     id: 4,
+    category: 'Scalp Detox & Shield',
     title: 'Scalp SOS & Detox',
     subtitle: 'Hard water mineral shield & scalp clarity',
     productName: 'SENSEIN® Scalp Shield Serum',
@@ -53,6 +57,7 @@ const defaultVideoCards = [
   },
   {
     id: 5,
+    category: 'Luxury Hair Fragrance',
     title: 'Royal Amber Mist',
     subtitle: 'Luxury alcohol-free hair mist & glass shine',
     productName: 'SENSEIN® Royal Amber Hair Perfume',
@@ -455,9 +460,16 @@ export default function RealResultsSection({ config }) {
                       />
                     )}
 
-                    {/* Active Reel Live UI Overlay (Product Name, Sound Icon & Shop Now) */}
+                    {/* Active Reel Live UI Overlay (Category Name, Product Name, Price & Shop Now) */}
                     {isCenter && (
-                      <div className="absolute inset-x-0 bottom-0 z-20 p-3 sm:p-4 bg-gradient-to-t from-black/95 via-black/70 to-transparent text-left space-y-2 pt-8 sm:pt-12 pointer-events-auto">
+                      <div className="absolute inset-x-0 bottom-0 z-20 p-3 sm:p-4 bg-gradient-to-t from-black/95 via-black/75 to-transparent text-left space-y-1.5 pt-8 sm:pt-12 pointer-events-auto">
+                        {/* Category Name above Product Name */}
+                        {(card.category || card.title || card.tag) && (
+                          <div className="text-[9.5px] sm:text-[10.5px] font-black uppercase tracking-wider text-amber-300 drop-shadow-[0_1px_3px_rgba(0,0,0,0.8)] line-clamp-1">
+                            {card.category || card.title || card.tag}
+                          </div>
+                        )}
+
                         <h4 className="text-xs sm:text-sm font-bold text-white leading-tight line-clamp-2 drop-shadow-sm">
                           {card.productName}
                         </h4>
