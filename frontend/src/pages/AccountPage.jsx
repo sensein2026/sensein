@@ -28,6 +28,8 @@ import {
   Upload,
   Video,
   Sparkles,
+  Eye,
+  ExternalLink,
 } from 'lucide-react'
 import {
   useGetMyOrdersQuery,
@@ -108,6 +110,8 @@ export default function AccountPage() {
   }
 
   const [returnModalOrder, setReturnModalOrder] = useState(null)
+  const [viewingReturnData, setViewingReturnData] = useState(null)
+  const [previewMediaUrl, setPreviewMediaUrl] = useState(null)
   const [returnForm, setReturnForm] = useState({
     selectedItems: {}, // prodId -> { selected, quantity, reason, customerComment, customReason }
     requestType: 'RETURN_REPLACEMENT',
@@ -116,6 +120,28 @@ export default function AccountPage() {
     selectedReason: 'Damaged Product', // 'Damaged Product' | 'Wrong Product' | 'Other'
     otherReasonText: '',
   })
+
+  const handleOpenViewReturnModal = (order) => {
+    const returnReq =
+      Array.isArray(order.returnRequests) && order.returnRequests.length > 0
+        ? order.returnRequests[order.returnRequests.length - 1]
+        : null
+
+    setViewingReturnData({
+      order,
+      returnReq: returnReq || {
+        returnNumber: `RET-${order.orderNumber}`,
+        status: order.replacementStatus || order.returnStatus || 'REQUESTED',
+        requestType: order.replacementStatus ? 'RETURN_REPLACEMENT' : 'RETURN_REFUND',
+        rejectionReason: order.rejectionReason || '',
+        reverseWaybill: order.reverseWaybill || order.activeShipment?.waybill || '',
+        customerComment: order.customerComment || '',
+        evidenceMedia: [],
+        items: order.items || [],
+        timeline: [],
+      },
+    })
+  }
 
   const handleOpenReturnModal = (order) => {
     const initialItems = {}
@@ -895,6 +921,23 @@ export default function AccountPage() {
                 </button>
               )}
 
+              {((selectedOrderModal.returnStatus && selectedOrderModal.returnStatus !== 'NONE') ||
+                (selectedOrderModal.replacementStatus && selectedOrderModal.replacementStatus !== 'NONE') ||
+                (Array.isArray(selectedOrderModal.returnRequests) && selectedOrderModal.returnRequests.length > 0)) && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    const o = selectedOrderModal
+                    setSelectedOrderModal(null)
+                    handleOpenViewReturnModal(o)
+                  }}
+                  className="flex-1 py-2.5 px-4 bg-purple-50 hover:bg-purple-100 text-purple-700 text-xs font-bold uppercase rounded-xl border border-purple-200 transition-all flex items-center justify-center gap-1.5 cursor-pointer shadow-2xs whitespace-nowrap"
+                >
+                  <Eye className="h-4 w-4 text-purple-600 shrink-0" />
+                  <span>View Replacement</span>
+                </button>
+              )}
+
               {isWithin7DaysReplacement(selectedOrderModal) && (
                 <button
                   type="button"
@@ -1042,6 +1085,264 @@ export default function AccountPage() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* View Return / Replacement Request & Reverse Logistics Live Tracker Modal */}
+      {viewingReturnData && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 animate-in fade-in overflow-hidden">
+          <div className="bg-white rounded-2xl p-5 sm:p-7 max-w-xl w-full space-y-4 shadow-2xl relative my-8 border border-stone-200 max-h-[90dvh] overflow-y-auto">
+            {/* Modal Header */}
+            <div className="flex justify-between items-center border-b border-stone-100 pb-3">
+              <div className="flex items-center gap-2.5">
+                <div className="p-2 bg-[#5A3859]/10 text-[#5A3859] rounded-xl">
+                  <Package className="h-5 w-5" />
+                </div>
+                <div>
+                  <h3 className="font-display text-base font-extrabold text-stone-900">
+                    Replacement Request Details
+                  </h3>
+                  <p className="text-[11px] text-stone-500 font-medium">
+                    Order #{viewingReturnData.order.orderNumber} • Request #{viewingReturnData.returnReq.returnNumber || 'RET-' + viewingReturnData.order.orderNumber}
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setViewingReturnData(null)}
+                className="p-1.5 rounded-lg text-stone-400 hover:text-stone-700 hover:bg-stone-100 transition-colors cursor-pointer"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            {/* Status Alert Banner */}
+            {(() => {
+              const st = (viewingReturnData.returnReq.status || viewingReturnData.order.replacementStatus || viewingReturnData.order.returnStatus || 'REQUESTED').toUpperCase()
+              if (st === 'REJECTED' || st === 'QC_REJECTED') {
+                return (
+                  <div className="p-4 bg-rose-50 border border-rose-200 rounded-xl space-y-1.5 text-xs text-rose-900 animate-in fade-in">
+                    <div className="flex items-center gap-2 font-bold text-rose-700">
+                      <XCircle className="h-4 w-4 shrink-0 text-rose-600" />
+                      <span>Replacement Request Rejected</span>
+                    </div>
+                    <div className="bg-white/80 p-2.5 rounded-lg border border-rose-200 font-medium text-[11.5px] leading-relaxed">
+                      <span className="font-bold text-rose-800">Reason from Admin: </span>
+                      <span className="text-stone-800">{viewingReturnData.returnReq.rejectionReason || 'Item does not meet replacement or return policy terms.'}</span>
+                    </div>
+                    <p className="text-[10.5px] text-rose-700 font-medium pt-0.5">
+                      Need assistance? Please contact our customer care team at <strong className="font-semibold">care@sensein.com</strong> or call <strong className="font-semibold">+91 79849 19956</strong>.
+                    </p>
+                  </div>
+                )
+              }
+
+              if (st === 'COMPLETED' || st === 'QC_APPROVED' || st === 'CREATED') {
+                const repOrderNum = viewingReturnData.returnReq.replacementOrderNumber || `${viewingReturnData.order.orderNumber}-R1`
+                return (
+                  <div className="p-4 bg-emerald-50 border border-emerald-200 rounded-xl space-y-2 text-xs text-emerald-900 animate-in fade-in">
+                    <div className="flex items-center gap-2 font-bold text-emerald-800">
+                      <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-600" />
+                      <span>QC Inspection Passed • Replacement Order Dispatched!</span>
+                    </div>
+                    <p className="text-[11px] text-emerald-800">
+                      Your return parcel has passed quality verification. A brand new replacement item has been dispatched to your address free of charge.
+                    </p>
+                    <div className="flex items-center justify-between bg-white p-2.5 rounded-lg border border-emerald-200">
+                      <div>
+                        <span className="text-[10px] uppercase font-bold text-stone-400 block">Replacement Order Reference:</span>
+                        <span className="font-mono font-black text-stone-900 text-xs sm:text-sm">#{repOrderNum}</span>
+                      </div>
+                      <Link
+                        to={`/track-order?number=${encodeURIComponent(repOrderNum)}`}
+                        onClick={() => setViewingReturnData(null)}
+                        className="bg-[#5A3859] hover:bg-[#482b47] text-white text-[11px] font-bold px-3 py-1.5 rounded-lg flex items-center gap-1 transition-all shadow-2xs cursor-pointer"
+                      >
+                        <Truck className="h-3.5 w-3.5" />
+                        <span>Track Shipment</span>
+                      </Link>
+                    </div>
+                  </div>
+                )
+              }
+
+              if (['APPROVED', 'PICKUP_SCHEDULED', 'IN_TRANSIT', 'PICKED_UP'].includes(st)) {
+                return (
+                  <div className="p-4 bg-purple-50 border border-purple-200 rounded-xl space-y-2 text-xs text-purple-900 animate-in fade-in">
+                    <div className="flex items-center gap-2 font-bold text-purple-800">
+                      <Truck className="h-4 w-4 shrink-0 text-purple-600" />
+                      <span>Request Approved • Delhivery Reverse Pickup Scheduled</span>
+                    </div>
+                    <p className="text-[11px] text-purple-800">
+                      A Delhivery courier agent will visit your address to pick up the item. Please keep the product securely packaged with all accessories.
+                    </p>
+                    {viewingReturnData.returnReq.reverseWaybill && (
+                      <div className="bg-white p-2.5 rounded-lg border border-purple-200 flex items-center justify-between">
+                        <div>
+                          <span className="text-[10px] uppercase font-bold text-stone-400 block">Delhivery Reverse Waybill:</span>
+                          <span className="font-mono font-bold text-purple-900 text-xs">{viewingReturnData.returnReq.reverseWaybill}</span>
+                        </div>
+                        <span className="text-[10px] font-bold uppercase px-2 py-0.5 rounded bg-purple-100 text-purple-800">
+                          {st === 'IN_TRANSIT' || st === 'PICKED_UP' ? 'In Reverse Transit' : 'Pickup Assigned'}
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                )
+              }
+
+              return (
+                <div className="p-4 bg-amber-50 border border-amber-200 rounded-xl space-y-1 text-xs text-amber-900 animate-in fade-in">
+                  <div className="flex items-center gap-2 font-bold text-amber-800">
+                    <Clock className="h-4 w-4 shrink-0 text-amber-600" />
+                    <span>Request Submitted • Under Admin & QC Review</span>
+                  </div>
+                  <p className="text-[11px] text-amber-800">
+                    Our team is reviewing your uploaded photos/videos. You will receive an SMS and reverse pickup schedule notification once verified.
+                  </p>
+                </div>
+              )
+            })()}
+
+            {/* 5-Step Progress Timeline */}
+            <div className="p-3.5 bg-stone-50 rounded-xl border border-stone-200 text-xs">
+              <span className="text-[10px] uppercase font-bold text-stone-400 block mb-2.5">
+                Replacement Lifecycle
+              </span>
+              <div className="grid grid-cols-5 gap-1.5 text-center">
+                {(() => {
+                  const st = (viewingReturnData.returnReq.status || viewingReturnData.order.replacementStatus || 'REQUESTED').toUpperCase()
+                  const isRejected = st === 'REJECTED' || st === 'QC_REJECTED'
+                  const isApproved = ['APPROVED', 'PICKUP_SCHEDULED', 'IN_TRANSIT', 'PICKED_UP', 'QC_APPROVED', 'COMPLETED'].includes(st)
+                  const isPickedUp = ['IN_TRANSIT', 'PICKED_UP', 'QC_APPROVED', 'COMPLETED'].includes(st)
+                  const isQcPassed = ['QC_APPROVED', 'COMPLETED'].includes(st)
+                  const isDispatched = st === 'COMPLETED' || Boolean(viewingReturnData.returnReq.replacementOrderNumber)
+
+                  const steps = [
+                    { label: 'Submitted', done: true, current: st === 'REQUESTED' },
+                    { label: isRejected ? 'Rejected' : 'Reviewed', done: isApproved || isRejected, current: st === 'UNDER_REVIEW', failed: isRejected },
+                    { label: 'Reverse Pickup', done: isPickedUp, current: st === 'APPROVED' || st === 'PICKUP_SCHEDULED' },
+                    { label: 'QC Check', done: isQcPassed, current: isPickedUp && !isQcPassed },
+                    { label: 'Replacement Sent', done: isDispatched, current: isQcPassed && !isDispatched },
+                  ]
+
+                  return steps.map((step, idx) => (
+                    <div key={idx} className="flex flex-col items-center gap-1">
+                      <div
+                        className={`w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold ${
+                          step.failed
+                            ? 'bg-rose-600 text-white'
+                            : step.done
+                            ? 'bg-emerald-600 text-white'
+                            : step.current
+                            ? 'bg-[#5A3859] text-white ring-2 ring-[#5A3859]/30'
+                            : 'bg-stone-200 text-stone-500'
+                        }`}
+                      >
+                        {step.failed ? '✕' : step.done ? '✓' : idx + 1}
+                      </div>
+                      <span className={`text-[9.5px] leading-tight font-semibold ${
+                        step.failed ? 'text-rose-600' : step.done || step.current ? 'text-stone-900' : 'text-stone-400'
+                      }`}>
+                        {step.label}
+                      </span>
+                    </div>
+                  ))
+                })()}
+              </div>
+            </div>
+
+            {/* Submitted Reason & Notes */}
+            <div className="space-y-2 text-xs">
+              <div className="grid grid-cols-2 gap-2 bg-stone-50/80 p-3 rounded-xl border border-stone-200">
+                <div>
+                  <span className="text-[10px] uppercase font-bold text-stone-400 block">Resolution Type:</span>
+                  <div className="font-bold text-stone-900">
+                    {viewingReturnData.returnReq.requestType === 'RETURN_REPLACEMENT' || viewingReturnData.order.replacementStatus
+                      ? 'Free Product Replacement'
+                      : 'Return & Refund'}
+                  </div>
+                </div>
+                <div>
+                  <span className="text-[10px] uppercase font-bold text-stone-400 block">Reported Reason:</span>
+                  <div className="font-bold text-stone-900">
+                    {viewingReturnData.returnReq.items?.[0]?.reason || viewingReturnData.returnReq.reason || 'Damaged Product'}
+                  </div>
+                </div>
+              </div>
+
+              {viewingReturnData.returnReq.customerComment && (
+                <div className="p-3 bg-stone-50/60 rounded-xl border border-stone-200">
+                  <span className="text-[10px] uppercase font-bold text-stone-400 block mb-0.5">Your Note / Description:</span>
+                  <p className="text-stone-700 font-medium leading-relaxed">{viewingReturnData.returnReq.customerComment}</p>
+                </div>
+              )}
+            </div>
+
+            {/* Uploaded Evidence Photos & Videos */}
+            {viewingReturnData.returnReq.evidenceMedia && viewingReturnData.returnReq.evidenceMedia.length > 0 && (
+              <div className="space-y-1.5 text-xs">
+                <span className="text-[10px] uppercase font-bold text-stone-400 block">
+                  Uploaded Proof Media ({viewingReturnData.returnReq.evidenceMedia.length})
+                </span>
+                <div className="flex items-center gap-2 overflow-x-auto py-1">
+                  {viewingReturnData.returnReq.evidenceMedia.map((m, idx) => (
+                    <div
+                      key={idx}
+                      onClick={() => setPreviewMediaUrl(m)}
+                      className="relative w-16 h-16 rounded-xl border border-stone-200 overflow-hidden shrink-0 bg-stone-100 group cursor-pointer hover:ring-2 hover:ring-[#5A3859] transition-all"
+                    >
+                      {m.mimeType?.startsWith('video/') ? (
+                        <div className="w-full h-full flex flex-col items-center justify-center bg-stone-900 text-white p-1">
+                          <Video className="h-5 w-5 text-purple-400" />
+                          <span className="text-[8px] font-mono">Video</span>
+                        </div>
+                      ) : (
+                        <img src={m.url} alt={m.fileName || 'Proof'} className="w-full h-full object-cover" />
+                      )}
+                      <div className="absolute inset-0 bg-black/30 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity text-white">
+                        <Eye className="h-4 w-4" />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Close Button */}
+            <div className="pt-3 border-t border-stone-100 flex justify-end">
+              <button
+                type="button"
+                onClick={() => setViewingReturnData(null)}
+                className="px-5 py-2.5 bg-stone-900 hover:bg-black text-white text-xs font-bold rounded-xl shadow-xs transition-all cursor-pointer"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Full Media Preview Modal (Image / Video) */}
+      {previewMediaUrl && (
+        <div
+          className="fixed inset-0 z-60 flex items-center justify-center bg-black/80 p-4 animate-in fade-in"
+          onClick={() => setPreviewMediaUrl(null)}
+        >
+          <div className="bg-stone-900 rounded-2xl p-3 max-w-2xl w-full max-h-[85vh] overflow-hidden flex flex-col items-center relative" onClick={(e) => e.stopPropagation()}>
+            <button
+              type="button"
+              onClick={() => setPreviewMediaUrl(null)}
+              className="absolute top-2 right-2 p-1.5 text-white/70 hover:text-white bg-black/50 hover:bg-black rounded-full cursor-pointer z-10"
+            >
+              <X className="h-5 w-5" />
+            </button>
+            {previewMediaUrl.mimeType?.startsWith('video/') ? (
+              <video src={previewMediaUrl.url} controls autoPlay className="max-h-[75vh] w-auto rounded-lg" />
+            ) : (
+              <img src={previewMediaUrl.url} alt="Proof" className="max-h-[75vh] w-auto object-contain rounded-lg" />
+            )}
           </div>
         </div>
       )}
@@ -1978,6 +2279,20 @@ export default function AccountPage() {
                         >
                           <XCircle className="h-3.5 w-3.5 text-rose-600" />
                           <span>Cancel Order</span>
+                        </button>
+                      )}
+
+                      {/* View Replacement Request Button if customer requested return/replacement */}
+                      {((order.returnStatus && order.returnStatus !== 'NONE') ||
+                        (order.replacementStatus && order.replacementStatus !== 'NONE') ||
+                        (Array.isArray(order.returnRequests) && order.returnRequests.length > 0)) && (
+                        <button
+                          type="button"
+                          onClick={() => handleOpenViewReturnModal(order)}
+                          className="bg-purple-50 hover:bg-purple-100 text-purple-700 border border-purple-200 text-xs font-bold uppercase px-3 py-1.5 rounded-lg transition-all flex items-center justify-center gap-1.5 cursor-pointer shadow-2xs"
+                        >
+                          <Eye className="h-3.5 w-3.5 text-purple-600" />
+                          <span>View Replacement</span>
                         </button>
                       )}
 

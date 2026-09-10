@@ -141,8 +141,85 @@ export default function OrdersPage() {
   const [createShipping, { isLoading: isShippingSingle }] = useCreateShippingMutation()
   const [bulkCreateShipping, { isLoading: isBulkShipping }] = useBulkCreateShippingMutation()
   const [syncDelhiveryOrders, { isLoading: isSyncingDelhivery }] = useSyncDelhiveryOrdersMutation()
+  const [updateReturnStatus, { isLoading: isUpdatingReturn }] = useUpdateReturnStatusMutation()
+  const [processReturnQC, { isLoading: isProcessingQC }] = useProcessReturnQCMutation()
   const { data: delhiveryConfigData } = useGetDelhiveryConfigQuery()
   const [shippingOrderId, setShippingOrderId] = useState(null)
+
+  const [rejectReturnModal, setRejectReturnModal] = useState({
+    isOpen: false,
+    returnId: null,
+    orderNumber: '',
+    rejectionReason: '',
+  })
+  const [returnMediaModal, setReturnMediaModal] = useState(null)
+
+  const handleApproveReturn = async (returnId, orderNumber) => {
+    try {
+      const res = await updateReturnStatus({ id: returnId, status: 'APPROVED' }).unwrap()
+      const waybill = res.data?.reverseWaybill || ''
+      setFeedbackMsg(`🚚 Return for #${orderNumber} approved! Delhivery reverse pickup scheduled ${waybill ? `(AWB: ${waybill})` : ''}`)
+      refetch()
+      setTimeout(() => setFeedbackMsg(''), 6000)
+    } catch (err) {
+      alert(err?.data?.message || 'Failed to approve return request')
+    }
+  }
+
+  const handleOpenRejectModal = (returnId, orderNumber) => {
+    setRejectReturnModal({
+      isOpen: true,
+      returnId,
+      orderNumber,
+      rejectionReason: '',
+    })
+  }
+
+  const handleConfirmRejectReturn = async (e) => {
+    e.preventDefault()
+    if (!rejectReturnModal.returnId) return
+    if (!rejectReturnModal.rejectionReason.trim()) {
+      alert('Please provide a mandatory reason for rejecting this return/replacement request.')
+      return
+    }
+
+    try {
+      await updateReturnStatus({
+        id: rejectReturnModal.returnId,
+        status: 'REJECTED',
+        rejectionReason: rejectReturnModal.rejectionReason.trim(),
+      }).unwrap()
+
+      setFeedbackMsg(`❌ Return for #${rejectReturnModal.orderNumber} rejected. Reason recorded.`)
+      setRejectReturnModal({ isOpen: false, returnId: null, orderNumber: '', rejectionReason: '' })
+      refetch()
+      setTimeout(() => setFeedbackMsg(''), 6000)
+    } catch (err) {
+      alert(err?.data?.message || 'Failed to reject return request')
+    }
+  }
+
+  const handlePassQCAndDispatchReplacement = async (returnId, orderNumber) => {
+    const confirmed = window.confirm(
+      `Pass Quality Check (QC) for Order #${orderNumber}?\n\nThis will automatically restock sellable items and create & manifest a new replacement order (${orderNumber}-R1) with Delhivery Logistics!`
+    )
+    if (!confirmed) return
+
+    try {
+      await processReturnQC({
+        id: returnId,
+        qcStatus: 'PASSED',
+        disposition: 'SELLABLE',
+        qcNotes: 'Inspected and verified at Sensein Central Logistics Hub',
+      }).unwrap()
+
+      setFeedbackMsg(`✨ QC Passed! Replacement Order #${orderNumber}-R1 created and dispatched!`)
+      refetch()
+      setTimeout(() => setFeedbackMsg(''), 7000)
+    } catch (err) {
+      alert(err?.data?.message || 'Failed to process return QC inspection')
+    }
+  }
 
   const [searchTerm, setSearchTerm] = useState('')
   const [statusFilter, setStatusFilter] = useState('ALL')
@@ -322,6 +399,7 @@ export default function OrdersPage() {
     { key: 'IN_TRANSIT', label: 'In Transit', statusMatch: ['SHIPPED', 'IN_TRANSIT'] },
     { key: 'DELIVERED', label: 'Delivered', statusMatch: ['DELIVERED'] },
     { key: 'RTO', label: 'RTO', statusMatch: ['CANCELLED', 'RTO'] },
+    { key: 'RETURNS', label: 'Returns & Replacements', statusMatch: [] },
     { key: 'ADDRESS_EDITED', label: 'Address Edited', statusMatch: [] },
     { key: 'ALL', label: 'All Orders', statusMatch: [] },
   ]
@@ -346,12 +424,20 @@ export default function OrdersPage() {
         !activeTabObj ||
         statusFilter === 'ALL' ||
         statusFilter === 'ADDRESS_EDITED' ||
+        statusFilter === 'RETURNS' ||
         (activeTabObj.statusMatch && activeTabObj.statusMatch.includes(st))
 
       // Address-Edited tab shows every order that had its delivery address changed
       const matchesAddressEdited =
         statusFilter !== 'ADDRESS_EDITED' ||
         (Array.isArray(o.addressEditHistory) && o.addressEditHistory.length > 0)
+
+      // Returns & Replacements tab filter
+      const matchesReturns =
+        statusFilter !== 'RETURNS' ||
+        (Array.isArray(o.returnRequests) && o.returnRequests.length > 0) ||
+        (o.returnStatus && o.returnStatus !== 'NONE') ||
+        (o.replacementStatus && o.replacementStatus !== 'NONE')
 
       const isCod = o.paymentMethod === 'COD'
       const matchesPayment =
@@ -364,7 +450,7 @@ export default function OrdersPage() {
         (channelFilter === 'EKART' && (o.delhivery?.waybill || o.trackingNumber || o.courierPartner)) ||
         (channelFilter === 'DIRECT' && !o.delhivery?.waybill && !o.trackingNumber)
 
-      return matchesSearch && matchesStatus && matchesAddressEdited && matchesPayment && matchesChannel
+      return matchesSearch && matchesStatus && matchesAddressEdited && matchesReturns && matchesPayment && matchesChannel
     })
   }, [rawOrders, searchTerm, statusFilter, paymentModeFilter, channelFilter])
 
@@ -483,6 +569,14 @@ export default function OrdersPage() {
     if (tabKey === 'ALL') return rawOrders.length
     if (tabKey === 'ADDRESS_EDITED') {
       return rawOrders.filter((o) => Array.isArray(o.addressEditHistory) && o.addressEditHistory.length > 0).length
+    }
+    if (tabKey === 'RETURNS') {
+      return rawOrders.filter(
+        (o) =>
+          (Array.isArray(o.returnRequests) && o.returnRequests.length > 0) ||
+          (o.returnStatus && o.returnStatus !== 'NONE') ||
+          (o.replacementStatus && o.replacementStatus !== 'NONE')
+      ).length
     }
     const tab = filterTabs.find((t) => t.key === tabKey)
     if (!tab || !tab.statusMatch || tab.statusMatch.length === 0) return rawOrders.length
@@ -1721,6 +1815,155 @@ export default function OrdersPage() {
               </div>
             </div>
 
+            {/* Customer Return / Replacement Review Box (If return requested) */}
+            {(() => {
+              const returnReq =
+                Array.isArray(selectedOrder.returnRequests) && selectedOrder.returnRequests.length > 0
+                  ? selectedOrder.returnRequests[selectedOrder.returnRequests.length - 1]
+                  : null
+              const hasReturn =
+                Boolean(returnReq) ||
+                (selectedOrder.returnStatus && selectedOrder.returnStatus !== 'NONE') ||
+                (selectedOrder.replacementStatus && selectedOrder.replacementStatus !== 'NONE')
+
+              if (!hasReturn) return null
+
+              const retStatus = (returnReq?.status || selectedOrder.replacementStatus || selectedOrder.returnStatus || 'REQUESTED').toUpperCase()
+              const returnId = returnReq?._id || selectedOrder.returnRequestId
+
+              return (
+                <div className="p-4 bg-purple-50/70 rounded-2xl border border-purple-200/80 space-y-3.5 text-xs animate-in fade-in">
+                  <div className="flex flex-wrap items-center justify-between gap-2 border-b border-purple-200/60 pb-2.5">
+                    <div className="flex items-center gap-2">
+                      <div className="p-1.5 bg-purple-100 text-purple-700 rounded-lg">
+                        <PackageCheck className="h-4 w-4" />
+                      </div>
+                      <div>
+                        <div className="font-extrabold text-stone-900 text-sm flex items-center gap-2">
+                          <span>Return &amp; Replacement Request</span>
+                          <span
+                            className={`text-[10px] uppercase font-bold px-2 py-0.5 rounded ${
+                              retStatus === 'APPROVED' || retStatus === 'PICKUP_SCHEDULED'
+                                ? 'bg-purple-100 text-purple-800'
+                                : retStatus === 'REJECTED' || retStatus === 'QC_REJECTED'
+                                ? 'bg-rose-100 text-rose-800'
+                                : retStatus === 'QC_APPROVED' || retStatus === 'COMPLETED'
+                                ? 'bg-emerald-100 text-emerald-800'
+                                : 'bg-amber-100 text-amber-800'
+                            }`}
+                          >
+                            ● {retStatus}
+                          </span>
+                        </div>
+                        <div className="text-[10.5px] text-stone-500 font-mono">
+                          ID: #{returnReq?.returnNumber || `RET-${selectedOrder.orderNumber}`} • Type: {returnReq?.requestType || 'RETURN_REPLACEMENT'}
+                        </div>
+                      </div>
+                    </div>
+
+                    {returnReq?.reverseWaybill && (
+                      <div className="text-right">
+                        <span className="text-[9.5px] uppercase font-bold text-stone-400 block">Reverse AWB:</span>
+                        <span className="font-mono font-bold text-purple-900 text-xs">{returnReq.reverseWaybill}</span>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Customer Reason & Description */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 bg-white p-3 rounded-xl border border-purple-100 text-xs">
+                    <div>
+                      <span className="text-[10px] uppercase font-bold text-stone-400 block">Reported Reason:</span>
+                      <div className="font-bold text-stone-900">{returnReq?.items?.[0]?.reason || returnReq?.reason || 'Damaged / Wrong Product'}</div>
+                    </div>
+                    <div>
+                      <span className="text-[10px] uppercase font-bold text-stone-400 block">Customer Comment:</span>
+                      <div className="font-medium text-stone-700">{returnReq?.customerComment || 'None provided'}</div>
+                    </div>
+                  </div>
+
+                  {/* Rejection Note if Rejected */}
+                  {(retStatus === 'REJECTED' || retStatus === 'QC_REJECTED') && (
+                    <div className="p-3 bg-rose-100/70 border border-rose-200 rounded-xl text-xs text-rose-900">
+                      <span className="font-bold block">⚠️ Rejection Reason:</span>
+                      <span className="font-medium">{returnReq?.rejectionReason || 'Does not meet warranty terms'}</span>
+                    </div>
+                  )}
+
+                  {/* Uploaded Photos / Videos Proof Gallery */}
+                  {returnReq?.evidenceMedia && returnReq.evidenceMedia.length > 0 && (
+                    <div>
+                      <span className="text-[10px] uppercase font-bold text-stone-400 block mb-1.5">
+                        Customer Proof Attachments ({returnReq.evidenceMedia.length}):
+                      </span>
+                      <div className="flex items-center gap-2 overflow-x-auto py-1">
+                        {returnReq.evidenceMedia.map((m, idx) => (
+                          <div
+                            key={idx}
+                            onClick={() => setReturnMediaModal(m)}
+                            className="relative w-14 h-14 rounded-xl border border-stone-200 overflow-hidden shrink-0 bg-stone-100 group cursor-pointer hover:ring-2 hover:ring-purple-600 transition-all"
+                            title="Click to zoom / play"
+                          >
+                            {m.mimeType?.startsWith('video/') ? (
+                              <div className="w-full h-full flex flex-col items-center justify-center bg-stone-900 text-white p-1">
+                                <span className="text-[8px] font-mono">VIDEO</span>
+                              </div>
+                            ) : (
+                              <img src={m.url} alt="Proof" className="w-full h-full object-cover" />
+                            )}
+                            <div className="absolute inset-0 bg-black/30 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity text-white">
+                              <Eye className="h-3.5 w-3.5" />
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Admin Action Buttons for Return */}
+                  <div className="pt-2 border-t border-purple-200/60 flex flex-wrap items-center justify-end gap-2">
+                    {/* Approve Return Button */}
+                    {['RETURN_REQUESTED', 'REQUESTED', 'UNDER_REVIEW'].includes(retStatus) && returnId && (
+                      <button
+                        type="button"
+                        onClick={() => handleApproveReturn(returnId, selectedOrder.orderNumber)}
+                        disabled={isUpdatingReturn}
+                        className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white font-bold text-xs rounded-xl shadow-xs transition-all flex items-center gap-1.5 cursor-pointer"
+                      >
+                        <CheckCircle2 className="h-4 w-4" />
+                        <span>Approve &amp; Schedule Delhivery Reverse Pickup</span>
+                      </button>
+                    )}
+
+                    {/* Reject Return Button */}
+                    {['RETURN_REQUESTED', 'REQUESTED', 'UNDER_REVIEW'].includes(retStatus) && returnId && (
+                      <button
+                        type="button"
+                        onClick={() => handleOpenRejectModal(returnId, selectedOrder.orderNumber)}
+                        disabled={isUpdatingReturn}
+                        className="px-4 py-2 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 font-bold text-xs rounded-xl shadow-2xs transition-all flex items-center gap-1.5 cursor-pointer"
+                      >
+                        <XCircle className="h-4 w-4 text-rose-600" />
+                        <span>Reject Request (With Reason)</span>
+                      </button>
+                    )}
+
+                    {/* QC Pass & Dispatch Replacement */}
+                    {['APPROVED', 'PICKUP_SCHEDULED', 'IN_TRANSIT', 'PICKED_UP', 'RECEIVED', 'QC_PENDING'].includes(retStatus) && returnId && (
+                      <button
+                        type="button"
+                        onClick={() => handlePassQCAndDispatchReplacement(returnId, selectedOrder.orderNumber)}
+                        disabled={isProcessingQC}
+                        className="px-4 py-2 bg-[#5A3859] hover:bg-[#482b47] disabled:opacity-50 text-white font-bold text-xs rounded-xl shadow-xs transition-all flex items-center gap-1.5 cursor-pointer"
+                      >
+                        <Sparkles className="h-4 w-4 text-amber-300" />
+                        <span>QC Inspection Pass &amp; Dispatch Replacement (#{selectedOrder.orderNumber}-R1)</span>
+                      </button>
+                    )}
+                  </div>
+                </div>
+              )
+            })()}
+
             {/* Status & Manual Courier Overrides */}
             <div className="space-y-4 pt-4 border-t border-slate-100">
               <span className="font-bold text-slate-400 uppercase tracking-wider text-[10px] block">
@@ -1827,6 +2070,90 @@ export default function OrdersPage() {
                 </button>
               </div>
             </div>
+          </div>
+        </div>,
+        document.body
+      )}
+
+      {/* Reject Return Request Modal (Mandatory Reason Required) */}
+      {rejectReturnModal.isOpen && createPortal(
+        <div className="fixed inset-0 z-[99999] flex items-center justify-center bg-black/60 p-4 animate-in fade-in">
+          <div className="bg-white rounded-2xl p-5 sm:p-6 max-w-md w-full space-y-4 shadow-2xl relative border border-slate-200 animate-in zoom-in-95">
+            <div className="flex justify-between items-center border-b border-slate-100 pb-3">
+              <div className="flex items-center gap-2 text-rose-600">
+                <XCircle className="h-5 w-5" />
+                <h3 className="font-bold text-sm text-slate-900">
+                  Reject Replacement: #{rejectReturnModal.orderNumber}
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setRejectReturnModal({ isOpen: false, returnId: null, orderNumber: '', rejectionReason: '' })}
+                className="p-1 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors cursor-pointer"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            <form onSubmit={handleConfirmRejectReturn} className="space-y-3.5 text-xs">
+              <div>
+                <label className="block font-bold text-slate-700 mb-1">
+                  Mandatory Rejection Reason *
+                </label>
+                <textarea
+                  rows={3}
+                  required
+                  placeholder="Explain clearly why this request cannot be approved (e.g., user-induced physical damage, warranty expired, proof inconclusive)..."
+                  value={rejectReturnModal.rejectionReason}
+                  onChange={(e) => setRejectReturnModal((prev) => ({ ...prev, rejectionReason: e.target.value }))}
+                  className="w-full p-2.5 rounded-xl border border-slate-300 focus:border-rose-500 focus:ring-1 focus:ring-rose-500 outline-none text-xs text-slate-900 font-medium"
+                />
+                <p className="text-[10.5px] text-slate-400 mt-1">
+                  This explanation will be permanently displayed to the customer in their account.
+                </p>
+              </div>
+
+              <div className="pt-2 border-t border-slate-100 flex items-center justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setRejectReturnModal({ isOpen: false, returnId: null, orderNumber: '', rejectionReason: '' })}
+                  className="px-4 py-2 border border-slate-300 text-slate-700 hover:bg-slate-50 rounded-xl text-xs font-semibold cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={isUpdatingReturn}
+                  className="px-5 py-2 bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold rounded-xl shadow-xs transition-all cursor-pointer disabled:opacity-50"
+                >
+                  {isUpdatingReturn ? 'Rejecting...' : 'Confirm Rejection'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>,
+        document.body
+      )}
+
+      {/* Return Evidence Preview Modal */}
+      {returnMediaModal && createPortal(
+        <div
+          className="fixed inset-0 z-[99999] flex items-center justify-center bg-black/85 p-4 animate-in fade-in"
+          onClick={() => setReturnMediaModal(null)}
+        >
+          <div className="bg-slate-900 rounded-2xl p-3 max-w-2xl w-full max-h-[85vh] overflow-hidden flex flex-col items-center relative" onClick={(e) => e.stopPropagation()}>
+            <button
+              type="button"
+              onClick={() => setReturnMediaModal(null)}
+              className="absolute top-2 right-2 p-1.5 text-white/70 hover:text-white bg-black/50 hover:bg-black rounded-full cursor-pointer z-10"
+            >
+              <X className="h-5 w-5" />
+            </button>
+            {returnMediaModal.mimeType?.startsWith('video/') ? (
+              <video src={returnMediaModal.url} controls autoPlay className="max-h-[75vh] w-auto rounded-lg" />
+            ) : (
+              <img src={returnMediaModal.url} alt="Proof" className="max-h-[75vh] w-auto object-contain rounded-lg" />
+            )}
           </div>
         </div>,
         document.body
