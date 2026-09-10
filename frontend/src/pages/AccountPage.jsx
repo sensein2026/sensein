@@ -810,8 +810,9 @@ export default function AccountPage() {
             </div>
 
             {/* Action Buttons Inside Modal (Cancel Order + Track Order) */}
-            <div className="pt-3 border-t border-stone-200/80 flex items-center gap-2.5">
-              {!['DELIVERED', 'CANCELLED', 'RETURNED', 'RTO', 'PAYMENT_FAILED'].includes(selectedOrderModal.orderStatus) && (
+              {!['PICKED_UP', 'IN_TRANSIT', 'OUT_FOR_DELIVERY', 'DELIVERED', 'CANCELLED', 'RETURNED', 'RTO', 'PAYMENT_FAILED'].includes(
+                (selectedOrderModal.fulfillmentStatus || selectedOrderModal.orderStatus || '').toUpperCase()
+              ) && (
                 <button
                   type="button"
                   onClick={() => handleCancelOrder(selectedOrderModal._id, selectedOrderModal.orderNumber)}

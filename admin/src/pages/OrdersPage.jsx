@@ -1053,11 +1053,17 @@ export default function OrdersPage() {
                           <Clock className="h-3 w-3 text-slate-400 shrink-0" />
                           <span className="whitespace-nowrap">{formattedDate} • {formattedTime}</span>
                         </div>
-                        <div className="mt-1.5 flex items-center gap-1">
+                        <div className="mt-1.5 flex items-center gap-1 flex-wrap">
                           <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-semibold bg-sky-50 text-sky-700 border border-sky-200 whitespace-nowrap">
                             <Truck className="h-3 w-3 text-sky-600 shrink-0" />
                             <span>Delhivery Express</span>
                           </span>
+                          {(order.needsRelabel || order.addressUpdatedAfterManifest || order.activeShipment?.shipmentType === 'ADDRESS_CHANGE' || order.shipments?.some?.((s) => s.shipmentType === 'ADDRESS_CHANGE')) && (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[9.5px] font-bold bg-amber-100 text-amber-900 border border-amber-300 animate-pulse whitespace-nowrap">
+                              <AlertTriangle className="h-3 w-3 text-amber-600 shrink-0" />
+                              <span>Re-label Required</span>
+                            </span>
+                          )}
                         </div>
                       </td>
 
@@ -1450,6 +1456,21 @@ export default function OrdersPage() {
                 <X className="h-5 w-5" />
               </button>
             </div>
+
+            {/* Address Modified Warning Banner */}
+            {(selectedOrder.needsRelabel || selectedOrder.addressUpdatedAfterManifest || selectedOrder.activeShipment?.shipmentType === 'ADDRESS_CHANGE' || selectedOrder.shipments?.some?.((s) => s.shipmentType === 'ADDRESS_CHANGE')) && (
+              <div className="p-4 bg-amber-50 border border-amber-300 rounded-2xl text-amber-900 text-xs font-medium flex items-start gap-3 shadow-xs">
+                <AlertTriangle className="h-5 w-5 text-amber-600 shrink-0 mt-0.5" />
+                <div className="space-y-1">
+                  <div className="font-bold text-amber-950 text-xs uppercase tracking-wide">
+                    ⚠️ Re-label Required (Delivery Address Updated)
+                  </div>
+                  <div className="text-amber-800 leading-relaxed text-[11.5px]">
+                    Customer modified delivery address prior to physical courier pickup. The previous shipping label is void on Delhivery. Please print and attach the new thermal shipping label to prevent delivery to the old address.
+                  </div>
+                </div>
+              </div>
+            )}
 
 
             {/* Delhivery Dispatch / Assignment Notice Banner */}

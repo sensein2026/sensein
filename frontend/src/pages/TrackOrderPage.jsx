@@ -252,14 +252,31 @@ export default function TrackOrderPage() {
               const courier =
                 order.courierPartner ||
                 order.delhivery?.courierName ||
-                (['SHIPPED', 'IN_TRANSIT', 'OUT_FOR_DELIVERY', 'DELIVERED'].includes(order.orderStatus)
-                  ? 'Delhivery Express'
-                  : 'Awaiting Dispatch')
-              const isCancelled = order.orderStatus === 'CANCELLED' || order.orderStatus === 'PAYMENT_FAILED'
-              const isDelivered = order.orderStatus === 'DELIVERED'
-              const lockEvenBeforeDelivery = ['IN_TRANSIT', 'OUT_FOR_DELIVERY', 'DELIVERED'].includes(order.orderStatus)
-              // Address can still be edited pre-pickup, including when a Delhivery SHIPPED booking exists
-              const canEditAddress = !lockEvenBeforeDelivery && !isCancelled && order.orderStatus !== 'RETURNED' && order.orderStatus !== 'RTO'
+                'Delhivery Express'
+              const rawStatus = (order.orderStatus || '').toUpperCase()
+              const rawFulfillment = (order.fulfillmentStatus || order.activeShipment?.status || '').toUpperCase()
+              const isPickedUpOrBeyond = [
+                'PICKED_UP',
+                'PICKEDUP',
+                'IN_TRANSIT',
+                'OUT_FOR_DELIVERY',
+                'DELIVERED',
+                'RTO',
+                'RETURNED',
+              ].includes(rawFulfillment) || [
+                'PICKED_UP',
+                'PICKEDUP',
+                'IN_TRANSIT',
+                'OUT_FOR_DELIVERY',
+                'DELIVERED',
+                'RTO',
+                'RETURNED',
+              ].includes(rawStatus)
+              const isCancelled = ['CANCELLED', 'PAYMENT_FAILED', 'REJECTED'].includes(rawStatus) || ['CANCELLED', 'FAILED'].includes(rawFulfillment)
+              const isDelivered = rawStatus === 'DELIVERED' || rawFulfillment === 'DELIVERED'
+
+              // Address can ONLY be edited before physical pickup by courier
+              const canEditAddress = !isPickedUpOrBeyond && !isCancelled && !order.isAddressLocked
 
               const estDateStr = order.estimatedDeliveryDate
                 ? new Date(order.estimatedDeliveryDate).toLocaleDateString('en-IN', {

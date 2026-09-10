@@ -539,6 +539,8 @@ export const updateOrderAddress = async (req, res, next) => {
         if (!Array.isArray(order.shipments)) order.shipments = []
         order.shipments.push(newShipment._id)
         order.trackingNumber = newWaybill
+        order.needsRelabel = true
+        order.addressUpdatedAfterManifest = true
       } catch (shpErr) {
         logger.warn({ err: shpErr.message }, 'Shipment re-manifestation notice')
       }
