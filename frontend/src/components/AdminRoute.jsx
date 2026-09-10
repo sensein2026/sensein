@@ -12,8 +12,8 @@ export default function AdminRoute() {
   const isAuthenticated = useSelector(selectIsAuthenticated)
 
   const [loginMutation, { isLoading }] = useLoginMutation()
-  const [email, setEmail] = useState('mindnextarticle@gmail.com')
-  const [password, setPassword] = useState('AdminPassword123!')
+  const [email, setEmail] = useState('')
+  const [password, setPassword] = useState('')
   const [errorMsg, setErrorMsg] = useState('')
 
   const handleLogin = async (e) => {
@@ -31,11 +31,6 @@ export default function AdminRoute() {
     } catch (err) {
       setErrorMsg(err?.data?.message || err?.message || 'Login failed. Please check credentials.')
     }
-  }
-
-  const fillDefaultCredentials = () => {
-    setEmail('mindnextarticle@gmail.com')
-    setPassword('AdminPassword123!')
   }
 
   // If not logged in OR not an admin, render the original clean white SENSEIN ADMIN SUITE Login
@@ -111,14 +106,6 @@ export default function AdminRoute() {
           </form>
 
           <div className="mt-6 pt-4 border-t border-slate-100 flex flex-col items-center gap-2">
-            <button
-              type="button"
-              onClick={fillDefaultCredentials}
-              className="text-xs font-bold text-blue-600 hover:text-blue-700 hover:underline flex items-center gap-1.5 transition-colors cursor-pointer"
-            >
-              <KeyRound className="h-3.5 w-3.5" />
-              <span>Auto-fill Admin Credentials</span>
-            </button>
             <Link
               to="/"
               className="text-xs text-slate-400 hover:text-slate-600 transition-colors mt-2"
