@@ -329,50 +329,55 @@ export default function AccountPage() {
   const { data: invoiceConfigData } = useGetPublicInvoiceConfigQuery()
   const sellerConfig = invoiceConfigData?.sellerDetails
   const [printingOrder, setPrintingOrder] = useState(null)
+  const [isGeneratingPdf, setIsGeneratingPdf] = useState(false)
 
   const handleDownloadInvoice = async (orderToPrint) => {
-    if (!orderToPrint) return
+    if (!orderToPrint || isGeneratingPdf) return
+    setIsGeneratingPdf(true)
     setPrintingOrder(orderToPrint)
 
-    // Wait for the hidden print div to render & fonts/images to paint
-    await new Promise((resolve) => setTimeout(resolve, 900))
+    // Wait for the invoice component to render completely
+    await new Promise((resolve) => setTimeout(resolve, 500))
 
     const element = document.getElementById('sensein-invoice-print-area')
     if (!element) {
-      // Fallback to print dialog if element not found
       window.print()
+      setIsGeneratingPdf(false)
+      setPrintingOrder(null)
       return
     }
 
-    const html2pdf = (await import('html2pdf.js')).default
     const orderNum = orderToPrint.orderNumber || 'ORD'
 
-    const opt = {
-      margin: [6, 6, 6, 6],
-      filename: `Sensein_Tax_Invoice_${orderNum}.pdf`,
-      image: { type: 'jpeg', quality: 0.98 },
-      html2canvas: {
-        scale: 2,
-        useCORS: true,
-        logging: false,
-        backgroundColor: '#ffffff',
-        windowWidth: element.scrollWidth,
-      },
-      jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
-      pagebreak: { mode: ['avoid-all', 'css', 'legacy'] },
-    }
-
     try {
+      const html2pdf = (await import('html2pdf.js')).default
+      const opt = {
+        margin: [6, 6, 6, 6],
+        filename: `Sensein_Tax_Invoice_${orderNum}.pdf`,
+        image: { type: 'jpeg', quality: 0.98 },
+        html2canvas: {
+          scale: 2,
+          useCORS: true,
+          logging: false,
+          backgroundColor: '#ffffff',
+          scrollY: 0,
+          scrollX: 0,
+        },
+        jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
+        pagebreak: { mode: ['avoid-all', 'css', 'legacy'] },
+      }
+
       await html2pdf().set(opt).from(element).save()
     } catch (err) {
-      console.error('PDF generation failed, falling back to print:', err)
+      console.error('PDF generation failed, falling back to print dialog:', err)
       const prevTitle = document.title
       document.title = `Sensein_Tax_Invoice_${orderNum}`
       window.print()
       setTimeout(() => { document.title = prevTitle }, 1500)
+    } finally {
+      setIsGeneratingPdf(false)
+      setTimeout(() => setPrintingOrder(null), 800)
     }
-
-    setTimeout(() => setPrintingOrder(null), 1000)
   }
 
   const handleCancelOrder = async (orderId, orderNum) => {
@@ -455,6 +460,29 @@ export default function AccountPage() {
       alert(err?.data?.message || 'Failed to set default address')
     }
   }
+
+  // Universal Modal Scroll Lock (Locks background body scroll whenever any dialog/modal is open)
+  const isAnyModalOpen = Boolean(
+    unavailableModal ||
+    selectedOrderModal ||
+    editingOrderAddress ||
+    returnModalOrder ||
+    viewingReturnData ||
+    previewMediaUrl ||
+    editingAddr ||
+    showAddForm
+  )
+
+  useEffect(() => {
+    if (isAnyModalOpen) {
+      document.body.style.overflow = 'hidden'
+    } else {
+      document.body.style.overflow = ''
+    }
+    return () => {
+      document.body.style.overflow = ''
+    }
+  }, [isAnyModalOpen])
 
   useEffect(() => {
     window.scrollTo(0, 0)
@@ -708,23 +736,26 @@ export default function AccountPage() {
 
   return (
     <>
-      {/* Hidden Official A4 Tax Invoice (Used purely for Print & PDF Save) */}
+      {/* Official A4 Tax Invoice (Rendered with pure styles for 100% crisp html2pdf capture) */}
       {printingOrder && (
         <div
           id="sensein-invoice-print-area"
           className="print:block print:w-full print:m-0 print:p-0"
           style={{
-            position: 'fixed',
+            position: 'absolute',
+            left: '-9999px',
             top: 0,
-            left: 0,
-            width: '210mm',
-            background: 'white',
-            zIndex: -9999,
-            pointerEvents: 'none',
+            width: '794px',
+            minHeight: '1123px',
+            backgroundColor: '#ffffff',
+            color: '#000000',
+            padding: '16px',
+            boxSizing: 'border-box',
           }}
         >
           <DelhiveryTaxInvoice order={printingOrder} sellerConfig={sellerConfig} />
-          <div className="print:fixed print:bottom-0 print:left-0 print:w-full flex justify-start items-center text-[10px] text-neutral-500 font-mono px-1">
+          <div className="flex justify-between items-center text-[10px] text-neutral-500 font-mono pt-3 border-t border-neutral-200 mt-3">
+            <span>Sensein Botanical Luxury Pvt Ltd • Authorized Tax Invoice</span>
             <span>
               Generated on: {new Date().toLocaleDateString('en-IN', { day: '2-digit', month: '2-digit', year: 'numeric' })}, {new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true })}
             </span>
@@ -783,10 +814,8 @@ export default function AccountPage() {
       {/* Order Details Invoice Modal */}
       {selectedOrderModal && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 animate-in fade-in overflow-hidden"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 animate-in fade-in"
           onClick={() => setSelectedOrderModal(null)}
-          onWheel={(e) => e.preventDefault()}
-          onTouchMove={(e) => e.preventDefault()}
         >
           <div
             className="bg-white rounded-2xl p-5 sm:p-7 max-w-lg w-full shadow-2xl border border-stone-200 space-y-4 text-left relative animate-in zoom-in-95 max-h-[90dvh] overflow-y-auto overscroll-contain"

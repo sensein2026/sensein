@@ -626,14 +626,11 @@ export default function CheckoutPage() {
 
     if (isAnyModalOpen) {
       document.body.style.overflow = 'hidden'
-      document.body.style.touchAction = 'none'
     } else {
       document.body.style.overflow = ''
-      document.body.style.touchAction = ''
     }
     return () => {
       document.body.style.overflow = ''
-      document.body.style.touchAction = ''
     }
   }, [
     showPaymentChoiceModal,
@@ -1917,10 +1914,8 @@ export default function CheckoutPage() {
           typeof document !== 'undefined' &&
           createPortal(
             <div 
-              className="fixed inset-0 z-[9999] bg-black/75 backdrop-blur-xs flex flex-col justify-end sm:justify-center items-center p-0 sm:p-4 animate-in fade-in duration-200 overflow-hidden"
+              className="fixed inset-0 z-[9999] bg-black/75 backdrop-blur-xs flex flex-col justify-end sm:justify-center items-center p-0 sm:p-4 animate-in fade-in duration-200 overflow-y-auto"
               onClick={() => setShowPaymentChoiceModal(false)}
-              onWheel={(e) => e.preventDefault()}
-              onTouchMove={(e) => e.preventDefault()}
             >
               <div 
                 className="bg-white w-full sm:max-w-md rounded-t-3xl sm:rounded-2xl border-t sm:border border-stone-200 shadow-2xl overflow-hidden animate-in slide-in-from-bottom sm:zoom-in-95 duration-250 flex flex-col max-h-[88dvh] sm:max-h-[90vh] overscroll-contain my-0 sm:my-auto"
@@ -2077,10 +2072,8 @@ export default function CheckoutPage() {
           typeof document !== 'undefined' &&
           createPortal(
             <div 
-              className="fixed inset-0 z-[9999] bg-black/65 backdrop-blur-md flex items-center justify-center p-3 sm:p-4 animate-in fade-in duration-200 overflow-hidden"
+              className="fixed inset-0 z-[9999] bg-black/65 backdrop-blur-md flex items-center justify-center p-3 sm:p-4 animate-in fade-in duration-200 overflow-y-auto"
               onClick={() => setShowUpiQrModal(false)}
-              onWheel={(e) => e.preventDefault()}
-              onTouchMove={(e) => e.preventDefault()}
             >
               <div 
                 className="bg-white rounded-2xl p-6 max-w-sm w-full text-center space-y-4 shadow-2xl animate-in zoom-in-95 duration-200 my-auto"
@@ -2168,10 +2161,8 @@ export default function CheckoutPage() {
         {/* Address Picker Modal */}
         {showAddressPickerModal && (
           <div
-            className="fixed inset-0 z-[70] flex items-center justify-center p-3 sm:p-4 overflow-hidden"
+            className="fixed inset-0 z-[70] flex items-center justify-center p-3 sm:p-4 overflow-y-auto"
             style={{ background: 'rgba(28,20,26,0.65)', backdropFilter: 'blur(4px)' }}
-            onWheel={(e) => e.preventDefault()}
-            onTouchMove={(e) => e.preventDefault()}
           >
             <div className="bg-white w-full max-w-md rounded-2xl sm:rounded-none shadow-2xl border border-stone-200 flex flex-col max-h-[88dvh] sm:max-h-[85vh] my-auto overscroll-contain">
               {/* Modal Header */}

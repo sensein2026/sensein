@@ -55,14 +55,11 @@ export default function ShopPage() {
   useEffect(() => {
     if (isMobileFilterOpen || isMobileSortOpen) {
       document.body.style.overflow = 'hidden'
-      document.body.style.touchAction = 'none'
     } else {
       document.body.style.overflow = ''
-      document.body.style.touchAction = ''
     }
     return () => {
       document.body.style.overflow = ''
-      document.body.style.touchAction = ''
     }
   }, [isMobileFilterOpen, isMobileSortOpen])
 
@@ -664,11 +661,7 @@ export default function ShopPage() {
       {/* Mobile Filters Slide-in Drawer */}
       <AnimatePresence>
         {isMobileFilterOpen && (
-          <div
-            className="fixed inset-0 z-50 flex items-end overflow-hidden"
-            onWheel={(e) => e.preventDefault()}
-            onTouchMove={(e) => e.preventDefault()}
-          >
+          <div className="fixed inset-0 z-50 flex items-end overflow-hidden">
             {/* Backdrop */}
             <motion.div
               initial={{ opacity: 0 }}
@@ -883,11 +876,7 @@ export default function ShopPage() {
       {/* Mobile Sort Bottom Sheet */}
       <AnimatePresence>
         {isMobileSortOpen && (
-          <div
-            className="fixed inset-0 z-50 flex items-end overflow-hidden"
-            onWheel={(e) => e.preventDefault()}
-            onTouchMove={(e) => e.preventDefault()}
-          >
+          <div className="fixed inset-0 z-50 flex items-end overflow-hidden">
             <motion.div
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}

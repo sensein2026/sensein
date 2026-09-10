@@ -67,12 +67,15 @@ export function DelhiveryTaxInvoice({ order, sellerConfig }) {
           <h1 className="text-xl font-bold tracking-tight text-black uppercase">Tax Invoice</h1>
           <div className="text-[10px] text-neutral-500 font-medium">Original for Recipient</div>
         </div>
-        <div className="flex items-center">
-          <img
-            src="/images/sensein-logo.png"
-            alt="SENSEIN"
-            className="h-8 w-auto object-contain"
-          />
+        <div className="flex items-center text-right">
+          <div>
+            <div className="font-serif font-black text-xl tracking-[0.25em] text-[#5A3859] uppercase">
+              SENSEIN
+            </div>
+            <div className="text-[9px] tracking-[0.2em] font-bold text-neutral-500 uppercase">
+              Botanical Haircare
+            </div>
+          </div>
         </div>
       </div>
 

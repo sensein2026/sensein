@@ -49,16 +49,17 @@ export default function WelcomeAuthModal() {
     }
   }, [step])
 
-  // Countdown timer for resend OTP
+  // Lock body scroll when auth modal is active
   useEffect(() => {
-    let timer
-    if (resendCooldown > 0) {
-      timer = setInterval(() => {
-        setResendCooldown((prev) => prev - 1)
-      }, 1000)
+    if (isAuthModalOpen && !isAuthenticated) {
+      document.body.style.overflow = 'hidden'
+    } else {
+      document.body.style.overflow = ''
     }
-    return () => clearInterval(timer)
-  }, [resendCooldown])
+    return () => {
+      document.body.style.overflow = ''
+    }
+  }, [isAuthModalOpen, isAuthenticated])
 
   const handleClose = () => {
     dispatch(closeAuthModal())
@@ -137,10 +138,8 @@ export default function WelcomeAuthModal() {
 
   return (
     <div
-      className="fixed inset-0 z-[100] bg-black/75 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 md:p-6 overflow-hidden"
+      className="fixed inset-0 z-[100] bg-black/75 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 md:p-6 overflow-y-auto"
       onClick={handleBackdropClick}
-      onWheel={(e) => e.preventDefault()}
-      onTouchMove={(e) => e.preventDefault()}
     >
       {/* Modal Card — Sensein Signature Plum & Gold Luxury Style */}
       <div

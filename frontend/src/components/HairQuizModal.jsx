@@ -60,10 +60,8 @@ export default function HairQuizModal({ isOpen, onClose }) {
   useEffect(() => {
     if (isOpen) {
       document.body.style.overflow = 'hidden'
-      document.body.style.touchAction = 'none'
     } else {
       document.body.style.overflow = ''
-      document.body.style.touchAction = ''
     }
     return () => {
       document.body.style.overflow = ''
@@ -93,11 +91,7 @@ export default function HairQuizModal({ isOpen, onClose }) {
   const rec = answers[0] === 'curly' ? routineRecommendations.curly : routineRecommendations.default
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/75 backdrop-blur-xs overflow-hidden animate-in fade-in duration-200"
-      onWheel={(e) => e.preventDefault()}
-      onTouchMove={(e) => e.preventDefault()}
-    >
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/75 backdrop-blur-xs overflow-y-auto animate-in fade-in duration-200">
       <div className="relative w-full max-w-xl bg-[#fcf8f2] rounded-3xl p-5 sm:p-8 shadow-2xl border border-black/10 overflow-y-auto max-h-[92dvh] sm:max-h-[90vh] my-auto overscroll-contain">
         {/* Close Button */}
         <button

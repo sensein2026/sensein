@@ -455,41 +455,25 @@ export default function RealResultsSection({ config }) {
                       />
                     )}
 
-                    {/* Active Reel Live UI Overlay */}
+                    {/* Active Reel Live UI Overlay (Product Name, Sound Icon & Shop Now) */}
                     {isCenter && (
-                      <div className="absolute inset-x-0 bottom-0 z-20 p-3 sm:p-4 bg-gradient-to-t from-black/95 via-black/70 to-transparent text-left space-y-1.5 sm:space-y-2 pt-8 sm:pt-12 pointer-events-auto">
-                        <div className="flex items-center justify-between gap-2">
-                          <div className="flex items-center gap-1.5 flex-wrap">
-                            {card.showBestsellerTag !== false && (card.isBestseller || (card.tag && card.tag.toUpperCase() === 'BESTSELLER')) ? (
-                              <span className="inline-block px-2 py-0.5 rounded bg-amber-400 text-stone-950 text-[8px] sm:text-[9px] font-black uppercase tracking-wider shadow-xs">
-                                ★ BESTSELLER
-                              </span>
-                            ) : card.tag ? (
-                              <span className="inline-block px-1.5 py-0.5 rounded bg-[#5A3859] text-white text-[8px] sm:text-[9px] font-bold uppercase tracking-wider">
-                                {card.tag}
-                              </span>
-                            ) : null}
-                          </div>
-                          <span className="text-[10px] sm:text-[11px] font-bold text-amber-300 flex items-center gap-0.5 shrink-0">
-                            <Star className="w-2.5 h-2.5 sm:w-3 sm:h-3 fill-amber-300" />
-                            {card.rating}
-                          </span>
-                        </div>
-
-                        <h4 className="text-[11px] sm:text-sm font-bold text-white leading-tight line-clamp-1">
+                      <div className="absolute inset-x-0 bottom-0 z-20 p-3 sm:p-4 bg-gradient-to-t from-black/95 via-black/70 to-transparent text-left space-y-2 pt-8 sm:pt-12 pointer-events-auto">
+                        <h4 className="text-xs sm:text-sm font-bold text-white leading-tight line-clamp-2 drop-shadow-sm">
                           {card.productName}
                         </h4>
 
                         <div className="flex items-center justify-between pt-0.5">
-                          <span className="text-xs sm:text-sm font-extrabold text-white">
-                            {card.price}
-                          </span>
+                          {card.price && (
+                            <span className="text-xs sm:text-sm font-extrabold text-white drop-shadow-sm font-display">
+                              {card.price}
+                            </span>
+                          )}
                           <Link
-                            to={card.productLink}
-                            className="inline-flex items-center gap-1 bg-white text-[#5A3859] hover:bg-stone-100 text-[9px] sm:text-[10px] font-extrabold uppercase px-2.5 py-1 sm:px-3 sm:py-1.5 rounded-md shadow-md transition-all hover:scale-105"
+                            to={card.productLink || '/shop'}
+                            className="inline-flex items-center gap-1.5 bg-white text-[#5A3859] hover:bg-stone-100 text-[10px] sm:text-[11px] font-extrabold uppercase px-3 py-1.5 sm:px-3.5 sm:py-1.5 rounded-lg shadow-md transition-all hover:scale-105 cursor-pointer ml-auto"
                           >
-                            <ShoppingBag className="w-2.5 h-2.5 sm:w-3 sm:h-3 text-[#5A3859]" />
-                            <span>BUY NOW</span>
+                            <ShoppingBag className="w-3 h-3 text-[#5A3859]" />
+                            <span>SHOP NOW</span>
                           </Link>
                         </div>
                       </div>

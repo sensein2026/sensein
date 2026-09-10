@@ -236,11 +236,7 @@ export default function ApplyVoucherModal({ isOpen, onClose }) {
   const modalContent = (
     <AnimatePresence>
       {/* Premium Frosted Backdrop Blur Overlay */}
-      <div
-        className="fixed inset-0 z-[1000] flex items-center justify-center p-3 sm:p-6 bg-black/75 backdrop-blur-xs overflow-hidden"
-        onWheel={(e) => e.preventDefault()}
-        onTouchMove={(e) => e.preventDefault()}
-      >
+      <div className="fixed inset-0 z-[1000] flex items-center justify-center p-3 sm:p-6 bg-black/75 backdrop-blur-xs overflow-y-auto">
         {/* Backdrop click */}
         <div className="fixed inset-0" onClick={onClose} />
 
