@@ -659,7 +659,10 @@ export default function CheckoutPage() {
 
   useEffect(() => {
     if (savedAddresses && savedAddresses.length > 0 && !formData.addressLine) {
-      const defaultAddr = savedAddresses.find((a) => a.isDefault) || savedAddresses[0]
+      const defaultAddr =
+        savedAddresses.find((a) => (a.title || a.addressType || '').toUpperCase() === 'HOME') ||
+        savedAddresses.find((a) => a.isDefault) ||
+        savedAddresses[0]
       if (defaultAddr) {
         handleSelectSavedAddress(defaultAddr)
       }
@@ -1382,28 +1385,38 @@ export default function CheckoutPage() {
                           <button
                             key={addr._id}
                             type="button"
-                            onClick={() => {
-                              setPickerSelectedAddr(addr)
-                              setShowAddressPickerModal(true)
-                            }}
-                            className={`px-2.5 py-1 text-[11px] font-bold uppercase transition-all flex items-center gap-1 cursor-pointer border ${
+                            onClick={() => handleSelectSavedAddress(addr)}
+                            className={`px-3 py-1.5 text-[11px] font-bold uppercase transition-all flex items-center gap-1.5 cursor-pointer border rounded-lg ${
                               isSelected
-                                ? 'bg-[#5A3859] text-white border-[#5A3859] shadow-xs ring-1 ring-[#5A3859]/30'
+                                ? 'bg-[#5A3859] text-white border-[#5A3859] shadow-xs ring-2 ring-[#5A3859]/30'
                                 : 'bg-white text-stone-700 hover:bg-stone-50 border-stone-300'
                             }`}
                           >
-                            <IconComp className="h-3 w-3 shrink-0" />
+                            <IconComp className="h-3.5 w-3.5 shrink-0" />
                             <span>{addr.title || 'Home'}</span>
-                            <span className={`text-[9px] font-normal normal-case ${isSelected ? 'text-white/90' : 'text-stone-500'}`}>
-                              ({addr.fullName?.split(' ')[0]} - {addr.postalCode})
+                            <span className={`text-[9.5px] font-normal normal-case ${isSelected ? 'text-white/90' : 'text-stone-500'}`}>
+                              ({addr.fullName?.split(' ')[0]} • {addr.postalCode})
                             </span>
+                            {isSelected && <Check className="h-3 w-3 ml-0.5" />}
                           </button>
                         )
                       })}
                       <button
                         type="button"
+                        onClick={() => {
+                          setPickerSelectedAddr(savedAddresses[0])
+                          setShowAddressPickerModal(true)
+                        }}
+                        className="px-2.5 py-1.5 text-[10.5px] font-bold text-stone-600 hover:text-[#5A3859] bg-white hover:bg-stone-50 border border-stone-300 hover:border-[#5A3859] rounded-lg transition-all flex items-center gap-1 cursor-pointer"
+                        title="View all saved addresses in detail"
+                      >
+                        <MapPin className="h-3 w-3" />
+                        <span>View All ({savedAddresses.length})</span>
+                      </button>
+                      <button
+                        type="button"
                         onClick={handleAddNewAddress}
-                        className={`px-2.5 py-1 text-[11px] font-bold transition-all flex items-center gap-1 cursor-pointer border ${
+                        className={`px-2.5 py-1.5 text-[10.5px] font-bold transition-all flex items-center gap-1 cursor-pointer border rounded-lg ${
                           !savedAddresses.some(
                             (a) =>
                               a.addressLine &&
@@ -1415,7 +1428,7 @@ export default function CheckoutPage() {
                         }`}
                       >
                         <Plus className="h-3 w-3" />
-                        <span>New</span>
+                        <span>Add New</span>
                       </button>
                     </div>
                   </div>
