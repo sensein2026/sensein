@@ -2096,12 +2096,23 @@ export default function HomepageCmsPage() {
                   return (
                     <div
                       key={card.id || index}
-                      className="p-5 bg-slate-50 border border-slate-200/90 rounded-2xl space-y-3 shadow-xs"
+                      className="p-5 bg-white border border-slate-200/90 rounded-2xl space-y-4 shadow-sm"
                     >
-                      <div className="flex items-center justify-between border-b border-slate-200/80 pb-2">
-                        <span className="text-xs font-bold text-slate-900">
-                          #{index + 1} {card.productName || 'Video Reel'} ({card.price || '₹999'})
-                        </span>
+                      {/* Reel Card Header */}
+                      <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+                        <div className="flex items-center gap-2">
+                          <span className="w-6 h-6 rounded-full bg-blue-600 text-white text-xs font-bold flex items-center justify-center shadow-xs">
+                            {index + 1}
+                          </span>
+                          <span className="text-sm font-bold text-slate-900">
+                            {card.productName || `Video Reel #${index + 1}`}
+                          </span>
+                          {card.price && (
+                            <span className="text-xs font-semibold px-2 py-0.5 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-md">
+                              {card.price}
+                            </span>
+                          )}
+                        </div>
                         <button
                           type="button"
                           onClick={() => {
@@ -2122,180 +2133,118 @@ export default function HomepageCmsPage() {
                             )
                           }}
                           className="p-1.5 text-rose-600 hover:text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-200 rounded-lg cursor-pointer transition-colors"
+                          title="Delete Reel"
                         >
-                          <Trash2 className="h-3.5 w-3.5" />
+                          <Trash2 className="h-4 w-4" />
                         </button>
                       </div>
 
-                      {/* Quick Auto-Fill Product Selector */}
-                      <div className="p-3 bg-gradient-to-r from-blue-50/80 via-indigo-50/60 to-purple-50/80 border border-blue-200/80 rounded-xl flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                        <div className="flex items-center gap-2">
-                          <div className="p-1.5 bg-blue-600 text-white rounded-lg shadow-xs">
-                            <Package className="h-4 w-4" />
-                          </div>
-                          <div>
-                            <span className="text-xs font-bold text-slate-900 block">
-                              Auto-Fill from Live Store Product (લાઈવ પ્રોડક્ટ પસંદ કરો)
-                            </span>
-                            <span className="text-[10px] text-slate-500 block">
-                              પ્રોડક્ટ સિલેક્ટ કરતાં જ Category, Name, Price, Rating અને Shop Link ઓટોમેટિક ભરાઈ જશે.
-                            </span>
-                          </div>
+                      {/* 1. SELECT PRODUCT DROPDOWN */}
+                      <div className="p-4 bg-slate-50 border border-slate-200/80 rounded-xl space-y-2.5">
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1">
+                          <label className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
+                            <Package className="h-4 w-4 text-blue-600" />
+                            1. Select Store Product (પ્રોડક્ટ પસંદ કરો)
+                          </label>
+                          <span className="text-[11px] text-slate-500 font-medium">
+                            *પ્રોડક્ટ સિલેક્ટ કરતાં જ નામ, કેટેગરી, પ્રાઇસ અને શોપ લિંક આપોઆપ સેટ થઈ જશે
+                          </span>
                         </div>
 
-                        <div className="sm:w-72 shrink-0">
-                          <select
-                            value={
-                              storeProducts.find(
-                                (p) =>
-                                  p.name === card.productName ||
-                                  `/product/${p.slug || p._id}` === card.productLink
-                              )?._id || ''
+                        <select
+                          value={
+                            storeProducts.find(
+                              (p) =>
+                                p.name === card.productName ||
+                                `/product/${p.slug || p._id}` === card.productLink
+                            )?._id || ''
+                          }
+                          onChange={(e) => {
+                            const selectedId = e.target.value
+                            if (!selectedId) return
+                            const prod = storeProducts.find((p) => p._id === selectedId)
+                            if (prod) {
+                              const catName =
+                                (typeof prod.category === 'object' ? prod.category?.name : prod.category) ||
+                                (prod.name?.toLowerCase().includes('shampoo')
+                                  ? 'Hair Shampoo'
+                                  : prod.name?.toLowerCase().includes('serum') && prod.name?.toLowerCase().includes('scalp')
+                                  ? 'Scalp Serum'
+                                  : prod.name?.toLowerCase().includes('serum')
+                                  ? 'Hair Serum'
+                                  : prod.name?.toLowerCase().includes('mask')
+                                  ? 'Hair Mask'
+                                  : prod.name?.toLowerCase().includes('perfume')
+                                  ? 'Hair Perfume'
+                                  : 'Haircare')
+
+                              const prodPrice = `₹${prod.salePrice || prod.price || 999}`
+                              const prodLink = `/product/${prod.slug || prod._id}`
+                              const prodRating = `${prod.rating || 5.0} ★`
+                              const prodImage = (prod.images && prod.images[0]) || prod.image || ''
+
+                              setFormData((prev) => {
+                                const updatedCards = [...(prev.realResults?.videoCards || [])]
+                                updatedCards[index] = {
+                                  ...updatedCards[index],
+                                  productName: prod.name,
+                                  category: catName,
+                                  price: prodPrice,
+                                  productLink: prodLink,
+                                  rating: prodRating,
+                                  poster: updatedCards[index].poster || prodImage,
+                                  subtitle:
+                                    prod.subtitle ||
+                                    prod.shortDescription ||
+                                    updatedCards[index].subtitle ||
+                                    'Experience salon-grade transformations',
+                                  tag: prod.badge || updatedCards[index].tag || 'BESTSELLER',
+                                }
+                                return {
+                                  ...prev,
+                                  realResults: {
+                                    ...(prev.realResults || {}),
+                                    videoCards: updatedCards,
+                                  },
+                                }
+                              })
+                              showNotification(`Auto-filled details from "${prod.name}"!`)
                             }
-                            onChange={(e) => {
-                              const selectedId = e.target.value
-                              if (!selectedId) return
-                              const prod = storeProducts.find((p) => p._id === selectedId)
-                              if (prod) {
-                                const catName =
-                                  (typeof prod.category === 'object' ? prod.category?.name : prod.category) ||
-                                  (prod.name?.toLowerCase().includes('shampoo')
-                                    ? 'Hair Shampoo'
-                                    : prod.name?.toLowerCase().includes('serum')
-                                    ? 'Hair Serum'
-                                    : prod.name?.toLowerCase().includes('mask')
-                                    ? 'Hair Mask'
-                                    : 'Haircare')
+                          }}
+                          className="w-full bg-white border border-slate-300 text-slate-900 text-xs font-semibold rounded-xl px-3.5 py-2.5 shadow-xs focus:border-blue-600 focus:ring-2 focus:ring-blue-100 focus:outline-none cursor-pointer"
+                        >
+                          <option value="">-- Choose Live Store Product --</option>
+                          {storeProducts.map((p) => (
+                            <option key={p._id} value={p._id}>
+                              {p.name} — ₹{p.salePrice || p.price}
+                            </option>
+                          ))}
+                        </select>
 
-                                const prodPrice = `₹${prod.salePrice || prod.price || 999}`
-                                const prodLink = `/product/${prod.slug || prod._id}`
-                                const prodRating = `${prod.rating || 5.0} ★`
-                                const prodImage = (prod.images && prod.images[0]) || prod.image || ''
-
-                                setFormData((prev) => {
-                                  const updatedCards = [...(prev.realResults?.videoCards || [])]
-                                  updatedCards[index] = {
-                                    ...updatedCards[index],
-                                    productName: prod.name,
-                                    category: catName,
-                                    price: prodPrice,
-                                    productLink: prodLink,
-                                    rating: prodRating,
-                                    poster: updatedCards[index].poster || prodImage,
-                                    subtitle:
-                                      prod.subtitle ||
-                                      prod.shortDescription ||
-                                      updatedCards[index].subtitle ||
-                                      '',
-                                  }
-                                  return {
-                                    ...prev,
-                                    realResults: {
-                                      ...(prev.realResults || {}),
-                                      videoCards: updatedCards,
-                                    },
-                                  }
-                                })
-                                showNotification(`Auto-filled details from "${prod.name}"!`)
-                              }
-                            }}
-                            className="w-full bg-white border border-blue-300 text-slate-900 text-xs font-bold rounded-xl px-3 py-2 shadow-xs focus:border-blue-600 focus:outline-none cursor-pointer"
-                          >
-                            <option value="">⚡ Choose Live Product to Auto-Fill...</option>
-                            {storeProducts.map((p) => (
-                              <option key={p._id} value={p._id}>
-                                {p.name} — ₹{p.salePrice || p.price}
-                              </option>
-                            ))}
-                          </select>
-                        </div>
+                        {/* Live detected product details pills */}
+                        {card.productName && (
+                          <div className="flex flex-wrap items-center gap-2 pt-1 text-[11px] text-slate-600">
+                            <span className="bg-blue-50 text-blue-700 font-bold px-2.5 py-0.5 rounded-md border border-blue-200/60">
+                              Category: {card.category || 'Haircare'}
+                            </span>
+                            <span className="bg-emerald-50 text-emerald-700 font-bold px-2.5 py-0.5 rounded-md border border-emerald-200/60">
+                              Price: {card.price || '₹999'}
+                            </span>
+                            <span className="bg-amber-50 text-amber-700 font-bold px-2.5 py-0.5 rounded-md border border-amber-200/60">
+                              Rating: {card.rating || '5.0 ★'}
+                            </span>
+                            <span className="bg-slate-100 text-slate-600 font-mono px-2.5 py-0.5 rounded-md border border-slate-200">
+                              Link: {card.productLink || '/shop'}
+                            </span>
+                          </div>
+                        )}
                       </div>
 
-                      <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
+                      {/* 2 & 3. VIDEO FILE & VIDEO COVER */}
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                         <div>
-                          <label className="block text-[11px] font-bold text-slate-700 mb-1">
-                            Category Name (કેટેગરી નામ)
-                          </label>
-                          <input
-                            type="text"
-                            placeholder="e.g. Hair Repair Shampoo"
-                            value={card.category || ''}
-                            onChange={(e) => updateReelCardField('category', e.target.value)}
-                            className="w-full bg-white border border-slate-200 text-slate-900 text-xs rounded-xl px-3.5 py-2 font-bold focus:border-blue-600 focus:outline-none"
-                          />
-                        </div>
-
-                        <div>
-                          <label className="block text-[11px] font-bold text-slate-700 mb-1">
-                            Product Name
-                          </label>
-                          <input
-                            type="text"
-                            value={card.productName || ''}
-                            onChange={(e) => updateReelCardField('productName', e.target.value)}
-                            className="w-full bg-white border border-slate-200 text-slate-900 text-xs rounded-xl px-3.5 py-2 font-bold focus:border-blue-600 focus:outline-none"
-                          />
-                        </div>
-
-                        <div>
-                          <label className="block text-[11px] font-bold text-slate-700 mb-1">
-                            Price (₹)
-                          </label>
-                          <input
-                            type="text"
-                            value={card.price || ''}
-                            onChange={(e) => updateReelCardField('price', e.target.value)}
-                            className="w-full bg-white border border-slate-200 text-slate-900 text-xs rounded-xl px-3.5 py-2 font-mono focus:border-blue-600 focus:outline-none"
-                          />
-                        </div>
-
-                        <div>
-                          <div className="flex items-center justify-between mb-1">
-                            <label className="block text-[11px] font-bold text-slate-700">
-                              Bestseller Tag (બેસ્ટસેલર ટેગ)
-                            </label>
-                            <label className="relative inline-flex items-center cursor-pointer">
-                              <input
-                                type="checkbox"
-                                checked={card.isBestseller !== false && card.tag !== ''}
-                                onChange={(e) => {
-                                  const checked = e.target.checked
-                                  setFormData((prev) => {
-                                    const updatedCards = [...(prev.realResults?.videoCards || [])]
-                                    updatedCards[index] = {
-                                      ...updatedCards[index],
-                                      isBestseller: checked,
-                                      tag: checked ? (card.tag || 'BESTSELLER') : '',
-                                    }
-                                    return {
-                                      ...prev,
-                                      realResults: {
-                                        ...(prev.realResults || {}),
-                                        videoCards: updatedCards,
-                                      },
-                                    }
-                                  })
-                                }}
-                                className="sr-only peer"
-                              />
-                              <div className="w-8 h-4 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:bg-amber-500"></div>
-                              <span className="ml-1.5 text-[10px] font-bold text-amber-600">
-                                {card.isBestseller !== false && card.tag !== '' ? 'ON' : 'OFF'}
-                              </span>
-                            </label>
-                          </div>
-                          <input
-                            type="text"
-                            placeholder="e.g. BESTSELLER or TOP RATED"
-                            value={card.tag || ''}
-                            onChange={(e) => updateReelCardField('tag', e.target.value)}
-                            className="w-full bg-white border border-slate-200 text-slate-900 text-xs rounded-xl px-3.5 py-2 font-mono font-bold focus:border-blue-600 focus:outline-none uppercase"
-                          />
-                        </div>
-
-                        <div className="sm:col-span-2">
                           <MediaUploadPicker
-                            label="Video Stream File (.mp4)"
+                            label="2. Video Stream File (વીડિયો ફાઇલ - .mp4)"
                             category="reels"
                             mediaType="video"
                             value={card.videoSrc || ''}
@@ -2303,47 +2252,13 @@ export default function HomepageCmsPage() {
                           />
                         </div>
 
-                        <MediaUploadPicker
-                          label="Poster Thumbnail"
-                          category="reels"
-                          mediaType="image"
-                          value={card.poster || ''}
-                          onChange={(url) => updateReelCardField('poster', url)}
-                        />
-
                         <div>
-                          <label className="block text-[11px] font-bold text-slate-700 mb-1">
-                            Product Link
-                          </label>
-                          <input
-                            type="text"
-                            value={card.productLink || ''}
-                            onChange={(e) => updateReelCardField('productLink', e.target.value)}
-                            className="w-full bg-white border border-slate-200 text-slate-900 text-xs rounded-xl px-3.5 py-2 font-mono focus:border-blue-600 focus:outline-none"
-                          />
-                        </div>
-
-                        <div>
-                          <label className="block text-[11px] font-bold text-slate-700 mb-1">
-                            Rating Text
-                          </label>
-                          <input
-                            type="text"
-                            value={card.rating || ''}
-                            onChange={(e) => updateReelCardField('rating', e.target.value)}
-                            className="w-full bg-white border border-slate-200 text-slate-900 text-xs rounded-xl px-3.5 py-2 font-mono focus:border-blue-600 focus:outline-none"
-                          />
-                        </div>
-
-                        <div>
-                          <label className="block text-[11px] font-bold text-slate-700 mb-1">
-                            Sub-Title
-                          </label>
-                          <input
-                            type="text"
-                            value={card.subtitle || ''}
-                            onChange={(e) => updateReelCardField('subtitle', e.target.value)}
-                            className="w-full bg-white border border-slate-200 text-slate-900 text-xs rounded-xl px-3.5 py-2 focus:border-blue-600 focus:outline-none"
+                          <MediaUploadPicker
+                            label="3. Video Cover / Poster (વીડિયોનું કવર ફોટો)"
+                            category="reels"
+                            mediaType="image"
+                            value={card.poster || ''}
+                            onChange={(url) => updateReelCardField('poster', url)}
                           />
                         </div>
                       </div>
