@@ -980,15 +980,15 @@ export default function HomepageCmsPage() {
 
           {/* TAB 3: Hero Carousel */}
           {activeTab === 'heroSlider' && (
-            <div className="space-y-6">
+            <div className="space-y-5">
               <div className="border-b border-slate-100 pb-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                 <div>
                   <h2 className="text-base font-bold text-slate-900 flex items-center gap-2 font-display">
                     <Sliders className="h-5 w-5 text-blue-600" />
                     Hero Carousel &amp; Video Slides
                   </h2>
-                  <p className="text-xs text-slate-500 mt-1">
-                    Upload photos/videos, configure logo &amp; subtitle, edit titles, subtext and custom button colors.
+                  <p className="text-xs text-slate-500 mt-0.5">
+                    હોમપેજ પર સૌથી ઉપર દેખાતા લક્ઝરી બેનર અને વિડીયો સ્લાઇડ્સ મેનેજ કરો.
                   </p>
                 </div>
                 <button
@@ -1002,11 +1002,11 @@ export default function HomepageCmsPage() {
                       videoSrc: '',
                       showLogo: true,
                       logoImage: '',
-                      logoSubtitle: '',
+                      logoSubtitle: 'PROFESSIONAL MEN',
                       title: '',
                       description: '',
-                      showBtn: false,
-                      btnText: '',
+                      showBtn: true,
+                      btnText: 'EXPLORE COLLECTION',
                       btnLink: '/shop',
                       btnBgColor: '#5A3859',
                       btnTextColor: '#ffffff',
@@ -1019,7 +1019,7 @@ export default function HomepageCmsPage() {
                       },
                     }))
                   }}
-                  className="px-4 py-2 bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 rounded-xl text-xs font-bold flex items-center gap-1.5 self-start cursor-pointer transition-all shadow-xs"
+                  className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 self-start cursor-pointer transition-all shadow-xs"
                 >
                   <Plus className="h-4 w-4" />
                   Add New Slide
@@ -1027,17 +1027,17 @@ export default function HomepageCmsPage() {
               </div>
 
               {/* Global Carousel Slide Duration Settings */}
-              <div className="p-4 bg-slate-50 border border-slate-200 rounded-xl flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div className="p-3.5 bg-slate-50 border border-slate-200/80 rounded-xl flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                 <div>
-                  <label className="text-xs font-bold text-slate-800 flex items-center gap-2 uppercase tracking-wide">
-                    <Sliders className="h-4 w-4 text-blue-600" />
-                    <span>Auto Slide Switch Timer / Duration (સ્લાઇડ બદલાવાનો સમય)</span>
+                  <label className="text-xs font-bold text-slate-800 flex items-center gap-2">
+                    <Sliders className="h-3.5 w-3.5 text-blue-600" />
+                    <span>Auto Slide Timer (સ્લાઇડ બદલાવાનો સમય)</span>
                   </label>
                   <p className="text-[11px] text-slate-500 mt-0.5">
-                    સ્લાઇડ કે વિડીયો કેટલી સેકન્ડ પછી આપમેળે આગળ વધશે તે નક્કી કરો (ગ્રાહક એરો કે ડોટ્સથી જાતે પણ ફેરવી શકે છે).
+                    દરેક સ્લાઇડ કેટલી સેકન્ડ પછી આપમેળે આગળ વધશે તે પસંદ કરો.
                   </p>
                 </div>
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-1.5">
                   {[3, 5, 6, 8, 10].map((sec) => (
                     <button
                       key={sec}
@@ -1060,30 +1060,11 @@ export default function HomepageCmsPage() {
                       {sec}s
                     </button>
                   ))}
-                  <div className="flex items-center gap-1 bg-white border border-slate-200 rounded-lg px-2 py-1">
-                    <input
-                      type="number"
-                      min={2}
-                      max={30}
-                      value={formData.heroSlider?.slideDuration || 6}
-                      onChange={(e) => {
-                        const val = Math.max(2, Math.min(30, Number(e.target.value) || 6))
-                        setFormData((prev) => ({
-                          ...prev,
-                          heroSlider: {
-                            ...(prev.heroSlider || {}),
-                            slideDuration: val,
-                          },
-                        }))
-                      }}
-                      className="w-12 text-xs font-mono font-bold text-slate-900 text-center focus:outline-none"
-                    />
-                    <span className="text-[10px] text-slate-400 font-bold">sec</span>
-                  </div>
                 </div>
               </div>
 
-              <div className="space-y-6">
+              {/* Slides List */}
+              <div className="space-y-4">
                 {(formData.heroSlider?.slides || []).map((slide, index) => {
                   const updateSlideField = (field, val) => {
                     setFormData((prev) => {
@@ -1103,17 +1084,23 @@ export default function HomepageCmsPage() {
                   }
 
                   const removeSlide = () => {
-                    setFormData((prev) => {
-                      const currentSlides = [...(prev.heroSlider?.slides || [])]
-                      currentSlides.splice(index, 1)
-                      return {
-                        ...prev,
-                        heroSlider: {
-                          ...(prev.heroSlider || {}),
-                          slides: currentSlides,
-                        },
+                    promptDelete(
+                      'Delete Slide',
+                      `Are you sure you want to delete Slide #${index + 1}?`,
+                      () => {
+                        setFormData((prev) => {
+                          const currentSlides = [...(prev.heroSlider?.slides || [])]
+                          currentSlides.splice(index, 1)
+                          return {
+                            ...prev,
+                            heroSlider: {
+                              ...(prev.heroSlider || {}),
+                              slides: currentSlides,
+                            },
+                          }
+                        })
                       }
-                    })
+                    )
                   }
 
                   const moveSlide = (direction) => {
@@ -1134,18 +1121,30 @@ export default function HomepageCmsPage() {
                     })
                   }
 
+                  const isPreviewOpen = previewOpen[slide.id || index] ?? false
+
                   return (
                     <div
                       key={slide.id || index}
-                      className="p-6 bg-slate-50 border border-slate-200 rounded-2xl relative group space-y-6"
+                      className="p-5 bg-white border border-slate-200/90 rounded-2xl space-y-4 shadow-sm"
                     >
-                      <div className="flex items-center justify-between pb-4 border-b border-slate-200">
-                        <div className="flex items-center gap-3">
-                          <span className="px-2.5 py-1 bg-blue-100 text-blue-800 text-[11px] font-bold rounded-lg font-mono">
-                            Slide #{index + 1}
+                      {/* Slide Header */}
+                      <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+                        <div className="flex items-center gap-2.5">
+                          <span className="w-6 h-6 rounded-full bg-blue-600 text-white text-xs font-bold flex items-center justify-center shadow-xs">
+                            {index + 1}
                           </span>
-                          <span className="text-xs font-bold text-slate-700 truncate max-w-xs">
-                            {slide.title || 'Untitled Banner Slide'}
+                          <span className="text-sm font-bold text-slate-900">
+                            {slide.title || `Slide #${index + 1}`}
+                          </span>
+                          <span
+                            className={`text-[10px] font-bold px-2 py-0.5 rounded-md border uppercase ${
+                              slide.type === 'video'
+                                ? 'bg-purple-50 text-purple-700 border-purple-200'
+                                : 'bg-blue-50 text-blue-700 border-blue-200'
+                            }`}
+                          >
+                            {slide.type === 'video' ? '🎬 Video Slide' : '🖼️ Image Slide'}
                           </span>
                         </div>
 
@@ -1154,7 +1153,7 @@ export default function HomepageCmsPage() {
                             type="button"
                             onClick={() => moveSlide(-1)}
                             disabled={index === 0}
-                            className="p-1.5 text-slate-400 hover:text-slate-700 disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer"
+                            className="p-1.5 text-slate-500 hover:text-slate-800 disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer rounded-lg hover:bg-slate-100"
                             title="Move Up"
                           >
                             <MoveUp className="h-4 w-4" />
@@ -1163,15 +1162,33 @@ export default function HomepageCmsPage() {
                             type="button"
                             onClick={() => moveSlide(1)}
                             disabled={index === (formData.heroSlider?.slides || []).length - 1}
-                            className="p-1.5 text-slate-400 hover:text-slate-700 disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer"
+                            className="p-1.5 text-slate-500 hover:text-slate-800 disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer rounded-lg hover:bg-slate-100"
                             title="Move Down"
                           >
                             <MoveDown className="h-4 w-4" />
                           </button>
                           <button
                             type="button"
+                            onClick={() =>
+                              setPreviewOpen((prev) => ({
+                                ...prev,
+                                [slide.id || index]: !isPreviewOpen,
+                              }))
+                            }
+                            className={`px-2.5 py-1 text-xs font-bold rounded-lg border transition-all flex items-center gap-1 cursor-pointer ${
+                              isPreviewOpen
+                                ? 'bg-blue-600 text-white border-blue-600'
+                                : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
+                            }`}
+                            title="Toggle Preview"
+                          >
+                            <Eye className="h-3.5 w-3.5" />
+                            <span>{isPreviewOpen ? 'Hide Preview' : 'Preview'}</span>
+                          </button>
+                          <button
+                            type="button"
                             onClick={removeSlide}
-                            className="p-1.5 text-rose-500 hover:text-rose-700 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer"
+                            className="p-1.5 text-rose-600 hover:text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-200 rounded-lg transition-colors cursor-pointer ml-1"
                             title="Delete Slide"
                           >
                             <Trash2 className="h-4 w-4" />
@@ -1179,440 +1196,259 @@ export default function HomepageCmsPage() {
                         </div>
                       </div>
 
-                      <div className="space-y-5">
-                        {/* 1. Logo & Branding Customization */}
-                        <div className="p-4 bg-white border border-slate-200 rounded-xl space-y-3.5">
+                      {/* Clean 2-Column Grid */}
+                      <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
+                        {/* Left Column: Media & Background */}
+                        <div className="lg:col-span-5 p-4 bg-slate-50 border border-slate-200/80 rounded-xl space-y-3.5">
                           <div className="flex items-center justify-between">
-                            <div>
-                              <span className="text-xs font-bold text-slate-800 flex items-center gap-1.5 uppercase tracking-wide">
-                                <Sparkles className="h-3.5 w-3.5 text-blue-600" />
-                                Logo &amp; Brand Tagline Controls (લોગો અને નીચેનું લખાણ)
-                              </span>
-                              <p className="text-[11px] text-slate-500 mt-0.5">
-                                લોગો બાય ડિફોલ્ટ SENSEIN લોગો રહેશે. તમે જો નવો ફોટો અપલોડ કરશો તો જ બદલાશે.
-                              </p>
-                            </div>
-                            <label className="relative inline-flex items-center cursor-pointer">
-                              <input
-                                type="checkbox"
-                                checked={slide.showLogo !== false}
-                                onChange={(e) => updateSlideField('showLogo', e.target.checked)}
-                                className="sr-only peer"
-                              />
-                              <div className="w-9 h-5 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-blue-600"></div>
-                              <span className="ml-2 text-xs font-semibold text-slate-700">
-                                {slide.showLogo !== false ? 'Logo ON' : 'Logo OFF'}
-                              </span>
+                            <label className="text-xs font-bold text-slate-800 uppercase tracking-wide">
+                              Slide Media (ફોટો / વિડીયો)
                             </label>
-                          </div>
-
-                          {slide.showLogo !== false && (
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2 border-t border-slate-100">
-                              <div>
-                                <MediaUploadPicker
-                                  label="Custom Logo Image (Default: SENSEIN Logo)"
-                                  mediaType="image"
-                                  category="brand"
-                                  value={slide.logoImage || ''}
-                                  onChange={(url) => updateSlideField('logoImage', url)}
-                                  placeholder="Select or upload custom logo (Default: SENSEIN Logo)..."
-                                />
-                                <p className="text-[11px] text-slate-500 mt-1">
-                                  જો ખાલી રાખશો તો ડિફોલ્ટ SENSEIN લોગો દેખાશે. નવો લોગો રાખવો હોય તો જ અપલોડ કરો.
-                                </p>
-                              </div>
-
-                              <div>
-                                <label className="block text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-1.5">
-                                  Logo Subtitle / Tagline (નીચેનું લખાણ)
-                                </label>
-                                <input
-                                  type="text"
-                                  placeholder="e.g. PROFESSIONAL MEN"
-                                  value={slide.logoSubtitle || ''}
-                                  onChange={(e) => updateSlideField('logoSubtitle', e.target.value)}
-                                  className="w-full bg-slate-50 border border-slate-200 text-slate-900 text-xs rounded-xl px-3.5 py-2.5 focus:border-blue-600 focus:bg-white focus:outline-none font-semibold tracking-wider uppercase"
-                                />
-                                <p className="text-[10px] text-slate-400 mt-1">
-                                  Text displayed right below the logo (e.g., PROFESSIONAL MEN, PROFESSIONAL, LUXURY CARE).
-                                </p>
-                              </div>
+                            <div className="flex bg-slate-200/80 p-0.5 rounded-lg text-xs font-semibold">
+                              <button
+                                type="button"
+                                onClick={() => updateSlideField('type', 'image')}
+                                className={`px-2.5 py-1 rounded-md transition-all cursor-pointer ${
+                                  (slide.type || 'image') === 'image'
+                                    ? 'bg-white text-slate-900 shadow-xs font-bold'
+                                    : 'text-slate-600 hover:text-slate-900'
+                                }`}
+                              >
+                                🖼️ Image
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => updateSlideField('type', 'video')}
+                                className={`px-2.5 py-1 rounded-md transition-all cursor-pointer ${
+                                  slide.type === 'video'
+                                    ? 'bg-white text-slate-900 shadow-xs font-bold'
+                                    : 'text-slate-600 hover:text-slate-900'
+                                }`}
+                              >
+                                🎬 Video
+                              </button>
                             </div>
-                          )}
-                        </div>
-
-                        {/* 2. Media Type & Upload */}
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                          <div>
-                            <label className="block text-xs font-bold text-slate-700 mb-1">
-                              Media Type
-                            </label>
-                            <select
-                              value={slide.type || 'image'}
-                              onChange={(e) => updateSlideField('type', e.target.value)}
-                              className="w-full bg-white border border-slate-200 text-slate-900 text-xs rounded-xl px-3.5 py-2.5 focus:border-blue-600 focus:outline-none font-semibold"
-                            >
-                              <option value="image">Still Image</option>
-                              <option value="video">Background Video (MP4)</option>
-                            </select>
                           </div>
 
                           {slide.type === 'video' ? (
-                            <MediaUploadPicker
-                              label="Slide Video (MP4 / WebM)"
-                              mediaType="video"
-                              category="hero"
-                              value={slide.videoSrc || ''}
-                              onChange={(url) => updateSlideField('videoSrc', url)}
-                            />
+                            <div className="space-y-3">
+                              <MediaUploadPicker
+                                label="Background Video (.mp4)"
+                                mediaType="video"
+                                category="hero"
+                                value={slide.videoSrc || ''}
+                                onChange={(url) => updateSlideField('videoSrc', url)}
+                              />
+                              <MediaUploadPicker
+                                label="Poster / Fallback Cover Photo"
+                                mediaType="image"
+                                category="hero"
+                                value={slide.poster || slide.image || ''}
+                                onChange={(url) => updateSlideField('poster', url)}
+                              />
+                            </div>
                           ) : (
                             <MediaUploadPicker
-                              label="Slide Photo / Image"
+                              label="Slide Photo / Banner Image"
                               mediaType="image"
                               category="hero"
                               value={slide.image || ''}
                               onChange={(url) => updateSlideField('image', url)}
                             />
                           )}
-                        </div>
 
-                        {slide.type === 'video' && (
-                          <MediaUploadPicker
-                            label="Poster / Fallback Image"
-                            mediaType="image"
-                            category="hero"
-                            value={slide.poster || ''}
-                            onChange={(url) => updateSlideField('poster', url)}
-                          />
-                        )}
-
-                        {/* 3. Text Headlines & Description */}
-                        <div>
-                          <label className="block text-xs font-bold text-slate-700 mb-1">
-                            Headline Title
-                          </label>
-                          <input
-                            type="text"
-                            placeholder="e.g. REPAIR DAMAGE. RESTORE LIFE."
-                            value={slide.title || ''}
-                            onChange={(e) => updateSlideField('title', e.target.value)}
-                            className="w-full bg-white border border-slate-200 text-slate-900 text-xs rounded-xl px-3.5 py-2.5 focus:border-blue-600 focus:outline-none font-bold tracking-tight uppercase"
-                          />
-                        </div>
-
-                        <div>
-                          <label className="block text-xs font-bold text-slate-700 mb-1">
-                            Subtext / Description
-                          </label>
-                          <textarea
-                            rows={2}
-                            placeholder="e.g. For Stronger, Healthier, Shinier Hair..."
-                            value={slide.description || ''}
-                            onChange={(e) => updateSlideField('description', e.target.value)}
-                            className="w-full bg-white border border-slate-200 text-slate-900 text-xs rounded-xl px-3.5 py-2.5 focus:border-blue-600 focus:outline-none"
-                          />
-                        </div>
-
-                        {/* Top-Level Slide Click Link */}
-                        <div className="p-4 bg-blue-50/50 border border-blue-200 rounded-xl space-y-2">
-                          <div className="flex items-center justify-between">
-                            <label className="block text-xs font-bold text-slate-800">
-                              Banner Click Destination Link (ફોટો / વિડીયો / આખા સ્લાઇડ ક્લિક લિંક)
+                          {/* Optional Tagline */}
+                          <div className="pt-2 border-t border-slate-200/60">
+                            <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                              Logo Tagline (લોગો નીચેનું લખાણ)
                             </label>
-                            <span className="text-[10px] text-blue-600 font-semibold bg-blue-100 px-2 py-0.5 rounded-md uppercase tracking-wider">
-                              Direct Slide Link
-                            </span>
+                            <input
+                              type="text"
+                              placeholder="e.g. PROFESSIONAL MEN"
+                              value={slide.logoSubtitle || ''}
+                              onChange={(e) => updateSlideField('logoSubtitle', e.target.value)}
+                              className="w-full bg-white border border-slate-200 text-slate-900 text-xs rounded-xl px-3 py-2 font-semibold uppercase tracking-wider focus:border-blue-600 focus:outline-none"
+                            />
                           </div>
-                          <input
-                            type="text"
-                            placeholder="e.g. /shop or /product/repair-shampoo or https://..."
-                            value={slide.btnLink || ''}
-                            onChange={(e) => updateSlideField('btnLink', e.target.value)}
-                            className="w-full bg-white border border-slate-200 text-slate-900 text-xs rounded-xl px-3.5 py-2.5 focus:border-blue-600 focus:outline-none font-mono"
-                          />
-                          <p className="text-[10px] text-slate-500">
-                            ગ્રાહક જ્યારે આખા બેનર/ફોટો/વિડીયો પર ક્લિક કરશે ત્યારે સીધો આ લિંક પર જશે.
-                          </p>
                         </div>
 
-                        {/* 4. CTA Button Controls */}
-                        <div className="p-4 bg-white border border-slate-200 rounded-xl space-y-4">
-                          <div className="flex items-center justify-between">
-                            <div>
-                              <span className="text-xs font-bold text-slate-800 flex items-center gap-1.5 uppercase tracking-wide">
-                                Button (CTA) Settings &amp; Colors (બટન લખાણ અને કલર)
-                              </span>
-                              <p className="text-[11px] text-slate-500 mt-0.5">
-                                Set button title, destination URL, button toggle and choose custom colors.
-                              </p>
-                            </div>
-                            <label className="relative inline-flex items-center cursor-pointer">
-                              <input
-                                type="checkbox"
-                                checked={slide.showBtn !== false}
-                                onChange={(e) => updateSlideField('showBtn', e.target.checked)}
-                                className="sr-only peer"
-                              />
-                              <div className="w-9 h-5 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-blue-600"></div>
-                              <span className="ml-2 text-xs font-semibold text-slate-700">
-                                {slide.showBtn !== false ? 'Button ON' : 'Button OFF'}
-                              </span>
+                        {/* Right Column: Content Texts & CTA Button */}
+                        <div className="lg:col-span-7 space-y-3.5">
+                          <div>
+                            <label className="block text-xs font-bold text-slate-700 mb-1">
+                              Headline Title (મુખ્ય ટાઈટલ)
                             </label>
+                            <input
+                              type="text"
+                              placeholder="e.g. REPAIR DAMAGE. RESTORE LIFE."
+                              value={slide.title || ''}
+                              onChange={(e) => updateSlideField('title', e.target.value)}
+                              className="w-full bg-white border border-slate-200 text-slate-900 text-xs rounded-xl px-3.5 py-2.5 font-bold tracking-tight uppercase focus:border-blue-600 focus:outline-none"
+                            />
                           </div>
 
-                          {slide.showBtn !== false && (
-                            <>
-                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2 border-t border-slate-100">
-                                <div>
-                                  <label className="block text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-1">
-                                    Button CTA Text
-                                  </label>
-                                  <input
-                                    type="text"
-                                    placeholder="e.g. EXPLORE COLLECTION"
-                                    value={slide.btnText || ''}
-                                    onChange={(e) => updateSlideField('btnText', e.target.value)}
-                                    className="w-full bg-slate-50 border border-slate-200 text-slate-900 text-xs rounded-xl px-3.5 py-2.5 focus:border-blue-600 focus:bg-white focus:outline-none font-bold uppercase tracking-wider"
-                                  />
-                                </div>
+                          <div>
+                            <label className="block text-xs font-bold text-slate-700 mb-1">
+                              Description (વર્ણન)
+                            </label>
+                            <textarea
+                              rows={2}
+                              placeholder="e.g. For Stronger, Healthier, Shinier Hair..."
+                              value={slide.description || ''}
+                              onChange={(e) => updateSlideField('description', e.target.value)}
+                              className="w-full bg-white border border-slate-200 text-slate-900 text-xs rounded-xl px-3.5 py-2 focus:border-blue-600 focus:outline-none"
+                            />
+                          </div>
 
-                                <div>
-                                  <label className="block text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-1">
-                                    Button Destination Link (ક્લિક લિંક)
-                                  </label>
-                                  <input
-                                    type="text"
-                                    placeholder="e.g. /shop or /products/shampoo"
-                                    value={slide.btnLink || ''}
-                                    onChange={(e) => updateSlideField('btnLink', e.target.value)}
-                                    className="w-full bg-slate-50 border border-slate-200 text-slate-900 text-xs rounded-xl px-3.5 py-2.5 focus:border-blue-600 focus:bg-white focus:outline-none font-mono"
-                                  />
-                                  <p className="text-[10px] text-slate-400 mt-1">
-                                    ગ્રાહક જ્યારે આ બટન પર ક્લિક કરશે ત્યારે આ લિંક પર જશે.
-                                  </p>
-                                </div>
-                              </div>
-
-                              {/* Custom Color Pickers */}
-                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2 border-t border-slate-100">
-                                <div>
-                                  <label className="block text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-1.5">
-                                    Button Background Color
-                                  </label>
-                                  <div className="flex items-center gap-2">
-                                    <input
-                                      type="color"
-                                      value={slide.btnBgColor || '#5A3859'}
-                                      onChange={(e) => updateSlideField('btnBgColor', e.target.value)}
-                                      className="h-9 w-9 rounded-lg border border-slate-200 p-0.5 cursor-pointer bg-white"
-                                    />
-                                    <input
-                                      type="text"
-                                      value={slide.btnBgColor || '#5A3859'}
-                                      onChange={(e) => updateSlideField('btnBgColor', e.target.value)}
-                                      className="flex-1 bg-slate-50 border border-slate-200 text-slate-900 text-xs rounded-xl px-3 py-2 font-mono font-bold focus:border-blue-600 focus:bg-white focus:outline-none"
-                                    />
-                                  </div>
-                                  <div className="flex items-center gap-1.5 mt-2 flex-wrap">
-                                    {['#5A3859', '#000000', '#D4AF37', '#1E293B', '#ffffff'].map((color) => (
-                                      <button
-                                        key={color}
-                                        type="button"
-                                        onClick={() => updateSlideField('btnBgColor', color)}
-                                        className="text-[10px] px-2 py-0.5 rounded border border-slate-200 bg-slate-100 hover:bg-slate-200 font-medium cursor-pointer"
-                                      >
-                                        {color === '#5A3859' ? 'Purple' : color === '#000000' ? 'Black' : color === '#D4AF37' ? 'Gold' : color === '#1E293B' ? 'Slate' : 'White'}
-                                      </button>
-                                    ))}
-                                  </div>
-                                </div>
-
-                                <div>
-                                  <label className="block text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-1.5">
-                                    Button Text Color
-                                  </label>
-                                  <div className="flex items-center gap-2">
-                                    <input
-                                      type="color"
-                                      value={slide.btnTextColor || '#ffffff'}
-                                      onChange={(e) => updateSlideField('btnTextColor', e.target.value)}
-                                      className="h-9 w-9 rounded-lg border border-slate-200 p-0.5 cursor-pointer bg-white"
-                                    />
-                                    <input
-                                      type="text"
-                                      value={slide.btnTextColor || '#ffffff'}
-                                      onChange={(e) => updateSlideField('btnTextColor', e.target.value)}
-                                      className="flex-1 bg-slate-50 border border-slate-200 text-slate-900 text-xs rounded-xl px-3 py-2 font-mono font-bold focus:border-blue-600 focus:bg-white focus:outline-none"
-                                    />
-                                  </div>
-                                  <div className="flex items-center gap-1.5 mt-2 flex-wrap">
-                                    {['#ffffff', '#000000', '#D4AF37'].map((color) => (
-                                      <button
-                                        key={color}
-                                        type="button"
-                                        onClick={() => updateSlideField('btnTextColor', color)}
-                                        className="text-[10px] px-2 py-0.5 rounded border border-slate-200 bg-slate-100 hover:bg-slate-200 font-medium cursor-pointer"
-                                      >
-                                        {color === '#ffffff' ? 'White' : color === '#000000' ? 'Black' : 'Gold'}
-                                      </button>
-                                    ))}
-                                  </div>
-                                </div>
-                              </div>
-                            </>
-                          )}
-                        </div>
-
-                        {/* 5. FULL BANNER LIVE REAL-TIME PREVIEW WITH TOGGLE & STORE PERSPECTIVE */}
-                        <div className="mt-8 border border-slate-800 bg-slate-900 rounded-2xl p-4 sm:p-5 text-white space-y-4">
-                          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-800">
-                            <div className="flex items-center gap-2.5">
-                              <div className="p-2 rounded-xl bg-blue-500/20 text-blue-400 border border-blue-500/30">
-                                <Eye className="h-4 w-4" />
-                              </div>
+                          {/* CTA Button and Link Row */}
+                          <div className="p-3.5 bg-slate-50 border border-slate-200/80 rounded-xl space-y-3">
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                               <div>
-                                <span className="text-xs font-bold font-display uppercase tracking-wider flex items-center gap-2">
-                                  FULL BANNER LIVE PREVIEW (આખી સ્લાઇડનો લાઇવ પ્રિવ્યૂ)
-                                  <span className="px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 text-[9px] font-mono font-semibold">
-                                    REAL-TIME SYNC
-                                  </span>
-                                </span>
-                                <p className="text-[11px] text-slate-400">
-                                  This is exactly how this banner will appear to visitors on your live store.
-                                </p>
+                                <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                                  Button Text (બટન લખાણ)
+                                </label>
+                                <input
+                                  type="text"
+                                  placeholder="e.g. EXPLORE COLLECTION"
+                                  value={slide.btnText || ''}
+                                  onChange={(e) => updateSlideField('btnText', e.target.value)}
+                                  className="w-full bg-white border border-slate-200 text-slate-900 text-xs rounded-xl px-3 py-2 font-bold uppercase tracking-wider focus:border-blue-600 focus:outline-none"
+                                />
+                              </div>
+
+                              <div>
+                                <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                                  Button Destination Link (ક્લિક લિંક)
+                                </label>
+                                <input
+                                  type="text"
+                                  placeholder="e.g. /shop or /product/..."
+                                  value={slide.btnLink || ''}
+                                  onChange={(e) => updateSlideField('btnLink', e.target.value)}
+                                  className="w-full bg-white border border-slate-200 text-slate-900 text-xs rounded-xl px-3 py-2 font-mono focus:border-blue-600 focus:outline-none"
+                                />
                               </div>
                             </div>
-                            <div className="flex items-center gap-3">
-                              <label className="relative inline-flex items-center cursor-pointer">
+
+                            {/* Button Color presets */}
+                            <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-slate-200/60">
+                              <span className="text-[11px] font-bold text-slate-600">
+                                Button Color:
+                              </span>
+                              <div className="flex items-center gap-1.5 flex-wrap">
+                                {[
+                                  { name: 'Plum (Brand)', color: '#5A3859' },
+                                  { name: 'Black', color: '#000000' },
+                                  { name: 'Gold', color: '#D4AF37' },
+                                  { name: 'Navy Slate', color: '#1E293B' },
+                                ].map((c) => (
+                                  <button
+                                    key={c.color}
+                                    type="button"
+                                    onClick={() => updateSlideField('btnBgColor', c.color)}
+                                    className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-bold border transition-all cursor-pointer ${
+                                      (slide.btnBgColor || '#5A3859') === c.color
+                                        ? 'bg-slate-900 text-white border-slate-900 shadow-xs'
+                                        : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-100'
+                                    }`}
+                                  >
+                                    <span
+                                      className="w-3 h-3 rounded-full border border-black/10"
+                                      style={{ backgroundColor: c.color }}
+                                    />
+                                    <span>{c.name}</span>
+                                  </button>
+                                ))}
                                 <input
-                                  type="checkbox"
-                                  checked={previewOpen[slide.id] ?? true}
-                                  onChange={(e) =>
-                                    setPreviewOpen((prev) => ({
-                                      ...prev,
-                                      [slide.id]: e.target.checked,
-                                    }))
-                                  }
-                                  className="sr-only peer"
+                                  type="color"
+                                  value={slide.btnBgColor || '#5A3859'}
+                                  onChange={(e) => updateSlideField('btnBgColor', e.target.value)}
+                                  className="h-7 w-7 rounded-lg border border-slate-200 p-0.5 cursor-pointer bg-white"
+                                  title="Custom Color"
                                 />
-                                <div className="w-8 h-4 bg-slate-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-600 after:border after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:bg-blue-500"></div>
-                                <span className="ml-1.5 text-[11px] font-semibold text-slate-300">
-                                  {(previewOpen[slide.id] ?? true) ? 'Preview ON' : 'Preview OFF'}
-                                </span>
-                              </label>
+                              </div>
                             </div>
                           </div>
-
-                          {(previewOpen[slide.id] ?? true) && (
-                            <div className="space-y-0 rounded-xl overflow-hidden border border-slate-800 shadow-2xl">
-                              {/* Simulated Storefront Header Bar */}
-                              <div className="w-full bg-white text-slate-900 border-b border-slate-200 px-4 py-2 flex items-center justify-between text-xs z-30 select-none">
-                                <div className="flex items-center gap-1.5 opacity-60">
-                                  <div className="w-3.5 h-0.5 bg-slate-800 rounded"></div>
-                                  <div className="w-3.5 h-0.5 bg-slate-800 rounded"></div>
-                                </div>
-                                <div className="flex flex-col items-center">
-                                  <span className="font-display font-black text-xs tracking-widest text-slate-900 uppercase">SENSEIN®</span>
-                                  <span className="text-[8px] font-semibold tracking-wider text-slate-400 -mt-0.5">PROFESSIONAL</span>
-                                </div>
-                                <div className="w-3.5 h-3.5 rounded-full border border-slate-400 opacity-60" />
-                              </div>
-
-                              {/* Interactive Banner Canvas Frame */}
-                              <div className="relative w-full overflow-hidden bg-black text-white h-[360px] sm:h-[480px] shadow-inner select-none flex flex-col justify-end">
-                                
-                                {/* Background Media (100% clean black if no media uploaded) */}
-                                {slide.type === 'video' && slide.videoSrc ? (
-                                  <video
-                                    key={slide.videoSrc}
-                                    autoPlay
-                                    muted
-                                    loop
-                                    playsInline
-                                    poster={slide.poster || slide.image}
-                                    className="absolute inset-0 w-full h-full object-cover object-center"
-                                  >
-                                    <source src={slide.videoSrc} type="video/mp4" />
-                                  </video>
-                                ) : slide.image ? (
-                                  <img
-                                    src={slide.image}
-                                    alt={slide.title || 'Slide Banner'}
-                                    className="absolute inset-0 w-full h-full object-cover object-center"
-                                  />
-                                ) : (
-                                  <div className="absolute inset-0 bg-black" />
-                                )}
-
-                                {/* Luxury Dark Gradient Overlay (only if media exists) */}
-                                {(slide.videoSrc || slide.image) && (
-                                  <div className="absolute inset-0 z-10 bg-gradient-to-t from-black/95 via-black/40 to-black/25 pointer-events-none" />
-                                )}
-
-                                {/* Content Overlay */}
-                                <div className="relative z-20 flex flex-col items-center justify-end pb-12 sm:pb-16 text-center px-4 sm:px-8 space-y-2.5 sm:space-y-3">
-                                  
-                                  {/* Logo + Tagline */}
-                                  {slide.showLogo !== false && (
-                                    <div className="flex flex-col items-center justify-center mb-0.5">
-                                      {slide.logoImage ? (
-                                        <img
-                                          src={slide.logoImage}
-                                          alt="Brand Logo"
-                                          className="max-h-9 sm:max-h-12 w-auto object-contain drop-shadow-lg"
-                                        />
-                                      ) : (
-                                        <SenseinLogo isWhite={true} className="drop-shadow-lg scale-90 sm:scale-100" />
-                                      )}
-                                      {slide.logoSubtitle && (
-                                        <span className="text-[9px] sm:text-xs font-semibold tracking-[0.25em] sm:tracking-[0.35em] text-white/90 uppercase mt-1 drop-shadow-sm font-sans">
-                                          {slide.logoSubtitle}
-                                        </span>
-                                      )}
-                                    </div>
-                                  )}
-
-                                  {/* Headline Title */}
-                                  {slide.title && (
-                                    <h2 className="font-display text-base sm:text-2xl md:text-3xl font-bold uppercase tracking-tight text-white drop-shadow-md leading-tight max-w-xl">
-                                      {slide.title}
-                                    </h2>
-                                  )}
-
-                                  {/* Subtext Description */}
-                                  {slide.description && (
-                                    <p className="text-[11px] sm:text-xs text-white/85 font-normal max-w-md leading-relaxed drop-shadow-sm px-2 line-clamp-2 sm:line-clamp-3">
-                                      {slide.description}
-                                    </p>
-                                  )}
-
-                                  {/* Button (Only visible if Button is ON and has text) */}
-                                  {slide.showBtn !== false && slide.btnText && (
-                                    <div className="pt-1">
-                                      <div
-                                        style={{
-                                          backgroundColor: slide.btnBgColor || '#5A3859',
-                                          color: slide.btnTextColor || '#ffffff',
-                                        }}
-                                        className="inline-block font-bold text-[11px] sm:text-xs uppercase px-7 py-2.5 sm:px-8 sm:py-3 tracking-wider shadow-xl transition-all"
-                                      >
-                                        {slide.btnText}
-                                      </div>
-                                    </div>
-                                  )}
-
-                                </div>
-
-                                {/* Bottom Wave Curve (Matches Live Storefront exact curve boundary) */}
-                                <div className="absolute -bottom-1 left-0 right-0 z-35 pointer-events-none">
-                                  <WavyTickerBar />
-                                </div>
-
-                              </div>
-                            </div>
-                          )}
                         </div>
                       </div>
+
+                      {/* Collapsible Live Real-time Visual Preview */}
+                      {isPreviewOpen && (
+                        <div className="pt-2">
+                          <div className="rounded-xl overflow-hidden border border-slate-800 shadow-xl relative bg-black text-white h-[320px] sm:h-[400px] flex flex-col justify-end">
+                            {slide.type === 'video' && slide.videoSrc ? (
+                              <video
+                                key={slide.videoSrc}
+                                autoPlay
+                                muted
+                                loop
+                                playsInline
+                                poster={slide.poster || slide.image}
+                                className="absolute inset-0 w-full h-full object-cover object-center"
+                              >
+                                <source src={slide.videoSrc} type="video/mp4" />
+                              </video>
+                            ) : slide.image ? (
+                              <img
+                                src={slide.image}
+                                alt={slide.title || 'Slide Banner'}
+                                className="absolute inset-0 w-full h-full object-cover object-center"
+                              />
+                            ) : (
+                              <div className="absolute inset-0 bg-slate-950 flex items-center justify-center text-slate-600 text-xs">
+                                No media uploaded
+                              </div>
+                            )}
+
+                            {(slide.videoSrc || slide.image) && (
+                              <div className="absolute inset-0 z-10 bg-gradient-to-t from-black/95 via-black/40 to-black/25 pointer-events-none" />
+                            )}
+
+                            <div className="relative z-20 flex flex-col items-center justify-end pb-10 text-center px-4 space-y-2">
+                              {slide.showLogo !== false && (
+                                <div className="flex flex-col items-center justify-center">
+                                  <SenseinLogo isWhite={true} className="drop-shadow-lg scale-90" />
+                                  {slide.logoSubtitle && (
+                                    <span className="text-[9px] font-semibold tracking-[0.3em] text-white/90 uppercase mt-1 drop-shadow-sm">
+                                      {slide.logoSubtitle}
+                                    </span>
+                                  )}
+                                </div>
+                              )}
+
+                              {slide.title && (
+                                <h2 className="font-display text-base sm:text-xl font-bold uppercase tracking-tight text-white drop-shadow-md leading-tight max-w-lg">
+                                  {slide.title}
+                                </h2>
+                              )}
+
+                              {slide.description && (
+                                <p className="text-[11px] text-white/85 max-w-md line-clamp-2 drop-shadow-sm">
+                                  {slide.description}
+                                </p>
+                              )}
+
+                              {slide.showBtn !== false && slide.btnText && (
+                                <div className="pt-1">
+                                  <div
+                                    style={{
+                                      backgroundColor: slide.btnBgColor || '#5A3859',
+                                      color: slide.btnTextColor || '#ffffff',
+                                    }}
+                                    className="inline-block font-bold text-[10px] sm:text-xs uppercase px-6 py-2 tracking-wider shadow-lg"
+                                  >
+                                    {slide.btnText}
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+
+                            <div className="absolute -bottom-1 left-0 right-0 z-30 pointer-events-none">
+                              <WavyTickerBar />
+                            </div>
+                          </div>
+                        </div>
+                      )}
                     </div>
                   )
                 })}
