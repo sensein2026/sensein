@@ -91,81 +91,68 @@ export function ToastProvider({ children }) {
           const isWarning = t.type === 'warning'
           const isInfo = !isSuccess && !isUpdate && !isDelete && !isError && !isWarning
 
+          // Color palette mapping
+          const accentColor = isSuccess
+            ? '#10B981' // Emerald
+            : isUpdate || isInfo
+            ? '#3B82F6' // Sky Blue
+            : isWarning
+            ? '#F59E0B' // Amber
+            : '#EF4444' // Rose Red
+
+          const iconBg = isSuccess
+            ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/40'
+            : isUpdate || isInfo
+            ? 'bg-blue-500/20 text-blue-400 border-blue-500/40'
+            : isWarning
+            ? 'bg-amber-500/20 text-amber-400 border-amber-500/40'
+            : 'bg-rose-500/20 text-rose-400 border-rose-500/40'
+
           return (
             <div
               key={t.id}
-              className={`pointer-events-auto relative overflow-hidden flex items-start gap-3.5 p-4 rounded-2xl border shadow-2xl backdrop-blur-xl transition-all duration-300 animate-in slide-in-from-top-4 ${
-                isSuccess
-                  ? 'bg-slate-900/98 border-emerald-500/40 text-white shadow-emerald-950/40 ring-1 ring-emerald-500/20'
-                  : isUpdate || isInfo
-                  ? 'bg-slate-900/98 border-blue-500/40 text-white shadow-blue-950/40 ring-1 ring-blue-500/20'
-                  : isWarning
-                  ? 'bg-slate-900/98 border-amber-500/40 text-white shadow-amber-950/40 ring-1 ring-amber-500/20'
-                  : 'bg-slate-900/98 border-rose-500/40 text-white shadow-rose-950/40 ring-1 ring-rose-500/20'
-              }`}
+              style={{
+                backgroundColor: '#0F172A',
+                boxShadow: '0 20px 35px -8px rgba(0, 0, 0, 0.75), 0 0 0 1px rgba(255, 255, 255, 0.12)',
+              }}
+              className="pointer-events-auto relative overflow-hidden flex items-start gap-3.5 p-4 rounded-2xl border border-slate-700/80 transition-all duration-300 animate-in slide-in-from-top-4"
             >
-              {/* Subtle Status Glow Pill on Left */}
+              {/* Left Accent Color Stripe */}
               <div
-                className={`absolute left-0 top-0 bottom-0 w-1.5 ${
-                  isSuccess
-                    ? 'bg-emerald-500'
-                    : isUpdate || isInfo
-                    ? 'bg-blue-500'
-                    : isWarning
-                    ? 'bg-amber-500'
-                    : 'bg-rose-500'
-                }`}
+                style={{ backgroundColor: accentColor }}
+                className="absolute left-0 top-0 bottom-0 w-1.5 rounded-l-2xl shadow-sm"
               />
 
               {/* Icon Container */}
               <div className="shrink-0 pl-1 mt-0.5">
-                {isSuccess && (
-                  <div className="w-8 h-8 rounded-xl bg-emerald-500/15 text-emerald-400 flex items-center justify-center border border-emerald-500/30 shadow-inner">
-                    <CheckCircle2 className="h-4.5 w-4.5" />
-                  </div>
-                )}
-                {isUpdate && (
-                  <div className="w-8 h-8 rounded-xl bg-blue-500/15 text-blue-400 flex items-center justify-center border border-blue-500/30 shadow-inner">
-                    <RefreshCw className="h-4.5 w-4.5 animate-spin" style={{ animationDuration: '3s' }} />
-                  </div>
-                )}
-                {isInfo && (
-                  <div className="w-8 h-8 rounded-xl bg-blue-500/15 text-blue-400 flex items-center justify-center border border-blue-500/30 shadow-inner">
-                    <Info className="h-4.5 w-4.5" />
-                  </div>
-                )}
-                {isWarning && (
-                  <div className="w-8 h-8 rounded-xl bg-amber-500/15 text-amber-400 flex items-center justify-center border border-amber-500/30 shadow-inner">
-                    <AlertTriangle className="h-4.5 w-4.5" />
-                  </div>
-                )}
-                {isDelete && (
-                  <div className="w-8 h-8 rounded-xl bg-rose-500/15 text-rose-400 flex items-center justify-center border border-rose-500/30 shadow-inner">
-                    <Trash2 className="h-4.5 w-4.5" />
-                  </div>
-                )}
-                {isError && (
-                  <div className="w-8 h-8 rounded-xl bg-rose-500/15 text-rose-400 flex items-center justify-center border border-rose-500/30 shadow-inner">
-                    <AlertCircle className="h-4.5 w-4.5" />
-                  </div>
-                )}
+                <div className={`w-9 h-9 rounded-xl flex items-center justify-center border shadow-xs ${iconBg}`}>
+                  {isSuccess && <CheckCircle2 className="h-5 w-5" />}
+                  {isUpdate && <RefreshCw className="h-4.5 w-4.5 animate-spin" style={{ animationDuration: '3s' }} />}
+                  {isInfo && <Info className="h-5 w-5" />}
+                  {isWarning && <AlertTriangle className="h-5 w-5" />}
+                  {isDelete && <Trash2 className="h-5 w-5" />}
+                  {isError && <AlertCircle className="h-5 w-5" />}
+                </div>
               </div>
 
-              {/* Message & Title */}
+              {/* Title & Message */}
               <div className="flex-1 min-w-0 pr-1">
                 {t.title && (
-                  <h4 className="text-xs font-bold tracking-tight text-white/95">{t.title}</h4>
+                  <h4 className="text-[13px] font-bold tracking-tight text-white leading-tight">
+                    {t.title}
+                  </h4>
                 )}
-                <p className="text-[12px] text-slate-300 mt-0.5 leading-snug break-words font-medium">
+                <p className="text-[12px] text-slate-200 mt-1 leading-snug break-words font-medium">
                   {t.message}
                 </p>
               </div>
 
               {/* Close Button */}
               <button
+                type="button"
                 onClick={() => removeToast(t.id)}
-                className="shrink-0 p-1 text-slate-400 hover:text-white rounded-lg hover:bg-white/10 transition-colors cursor-pointer"
-                title="Dismiss"
+                className="shrink-0 p-1 text-slate-400 hover:text-white rounded-lg hover:bg-slate-800 transition-colors cursor-pointer"
+                title="Close"
               >
                 <X className="h-4 w-4" />
               </button>

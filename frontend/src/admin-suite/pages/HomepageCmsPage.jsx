@@ -980,15 +980,15 @@ export default function HomepageCmsPage() {
 
           {/* TAB 3: Hero Carousel */}
           {activeTab === 'heroSlider' && (
-            <div className="space-y-5">
+            <div className="space-y-6">
               <div className="border-b border-slate-100 pb-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                 <div>
                   <h2 className="text-base font-bold text-slate-900 flex items-center gap-2 font-display">
                     <Sliders className="h-5 w-5 text-blue-600" />
                     Hero Carousel &amp; Video Slides
                   </h2>
-                  <p className="text-xs text-slate-500 mt-0.5">
-                    હોમપેજ પર સૌથી ઉપર દેખાતા લક્ઝરી બેનર અને વિડીયો સ્લાઇડ્સ મેનેજ કરો.
+                  <p className="text-xs text-slate-500 mt-1">
+                    Upload photos/videos, configure logo &amp; subtitle, edit titles, subtext and custom button colors.
                   </p>
                 </div>
                 <button
@@ -1002,11 +1002,11 @@ export default function HomepageCmsPage() {
                       videoSrc: '',
                       showLogo: true,
                       logoImage: '',
-                      logoSubtitle: 'PROFESSIONAL MEN',
+                      logoSubtitle: '',
                       title: '',
                       description: '',
-                      showBtn: true,
-                      btnText: 'EXPLORE COLLECTION',
+                      showBtn: false,
+                      btnText: '',
                       btnLink: '/shop',
                       btnBgColor: '#5A3859',
                       btnTextColor: '#ffffff',
@@ -1019,7 +1019,7 @@ export default function HomepageCmsPage() {
                       },
                     }))
                   }}
-                  className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 self-start cursor-pointer transition-all shadow-xs"
+                  className="px-4 py-2 bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 rounded-xl text-xs font-bold flex items-center gap-1.5 self-start cursor-pointer transition-all shadow-xs"
                 >
                   <Plus className="h-4 w-4" />
                   Add New Slide
@@ -1027,17 +1027,17 @@ export default function HomepageCmsPage() {
               </div>
 
               {/* Global Carousel Slide Duration Settings */}
-              <div className="p-3.5 bg-slate-50 border border-slate-200/80 rounded-xl flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div className="p-4 bg-slate-50 border border-slate-200 rounded-xl flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                 <div>
-                  <label className="text-xs font-bold text-slate-800 flex items-center gap-2">
-                    <Sliders className="h-3.5 w-3.5 text-blue-600" />
-                    <span>Auto Slide Timer (સ્લાઇડ બદલાવાનો સમય)</span>
+                  <label className="text-xs font-bold text-slate-800 flex items-center gap-2 uppercase tracking-wide">
+                    <Sliders className="h-4 w-4 text-blue-600" />
+                    <span>Auto Slide Switch Timer / Duration (સ્લાઇડ બદલાવાનો સમય)</span>
                   </label>
                   <p className="text-[11px] text-slate-500 mt-0.5">
-                    દરેક સ્લાઇડ કેટલી સેકન્ડ પછી આપમેળે આગળ વધશે તે પસંદ કરો.
+                    સ્લાઇડ કે વિડીયો કેટલી સેકન્ડ પછી આપમેળે આગળ વધશે તે નક્કી કરો (ગ્રાહક એરો કે ડોટ્સથી જાતે પણ ફેરવી શકે છે).
                   </p>
                 </div>
-                <div className="flex items-center gap-1.5">
+                <div className="flex items-center gap-2">
                   {[3, 5, 6, 8, 10].map((sec) => (
                     <button
                       key={sec}
@@ -1060,11 +1060,30 @@ export default function HomepageCmsPage() {
                       {sec}s
                     </button>
                   ))}
+                  <div className="flex items-center gap-1 bg-white border border-slate-200 rounded-lg px-2 py-1">
+                    <input
+                      type="number"
+                      min={2}
+                      max={30}
+                      value={formData.heroSlider?.slideDuration || 6}
+                      onChange={(e) => {
+                        const val = Math.max(2, Math.min(30, Number(e.target.value) || 6))
+                        setFormData((prev) => ({
+                          ...prev,
+                          heroSlider: {
+                            ...(prev.heroSlider || {}),
+                            slideDuration: val,
+                          },
+                        }))
+                      }}
+                      className="w-12 text-xs font-mono font-bold text-slate-900 text-center focus:outline-none"
+                    />
+                    <span className="text-[10px] text-slate-400 font-bold">sec</span>
+                  </div>
                 </div>
               </div>
 
-              {/* Slides List */}
-              <div className="space-y-4">
+              <div className="space-y-6">
                 {(formData.heroSlider?.slides || []).map((slide, index) => {
                   const updateSlideField = (field, val) => {
                     setFormData((prev) => {
@@ -1084,23 +1103,17 @@ export default function HomepageCmsPage() {
                   }
 
                   const removeSlide = () => {
-                    promptDelete(
-                      'Delete Slide',
-                      `Are you sure you want to delete Slide #${index + 1}?`,
-                      () => {
-                        setFormData((prev) => {
-                          const currentSlides = [...(prev.heroSlider?.slides || [])]
-                          currentSlides.splice(index, 1)
-                          return {
-                            ...prev,
-                            heroSlider: {
-                              ...(prev.heroSlider || {}),
-                              slides: currentSlides,
-                            },
-                          }
-                        })
+                    setFormData((prev) => {
+                      const currentSlides = [...(prev.heroSlider?.slides || [])]
+                      currentSlides.splice(index, 1)
+                      return {
+                        ...prev,
+                        heroSlider: {
+                          ...(prev.heroSlider || {}),
+                          slides: currentSlides,
+                        },
                       }
-                    )
+                    })
                   }
 
                   const moveSlide = (direction) => {
@@ -1121,30 +1134,18 @@ export default function HomepageCmsPage() {
                     })
                   }
 
-                  const isPreviewOpen = previewOpen[slide.id || index] ?? false
-
                   return (
                     <div
                       key={slide.id || index}
-                      className="p-5 bg-white border border-slate-200/90 rounded-2xl space-y-4 shadow-sm"
+                      className="p-6 bg-slate-50 border border-slate-200 rounded-2xl relative group space-y-6"
                     >
-                      {/* Slide Header */}
-                      <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-                        <div className="flex items-center gap-2.5">
-                          <span className="w-6 h-6 rounded-full bg-blue-600 text-white text-xs font-bold flex items-center justify-center shadow-xs">
-                            {index + 1}
+                      <div className="flex items-center justify-between pb-4 border-b border-slate-200">
+                        <div className="flex items-center gap-3">
+                          <span className="px-2.5 py-1 bg-blue-100 text-blue-800 text-[11px] font-bold rounded-lg font-mono">
+                            Slide #{index + 1}
                           </span>
-                          <span className="text-sm font-bold text-slate-900">
-                            {slide.title || `Slide #${index + 1}`}
-                          </span>
-                          <span
-                            className={`text-[10px] font-bold px-2 py-0.5 rounded-md border uppercase ${
-                              slide.type === 'video'
-                                ? 'bg-purple-50 text-purple-700 border-purple-200'
-                                : 'bg-blue-50 text-blue-700 border-blue-200'
-                            }`}
-                          >
-                            {slide.type === 'video' ? '🎬 Video Slide' : '🖼️ Image Slide'}
+                          <span className="text-xs font-bold text-slate-700 truncate max-w-xs">
+                            {slide.title || 'Untitled Banner Slide'}
                           </span>
                         </div>
 

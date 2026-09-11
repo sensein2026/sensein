@@ -113,9 +113,9 @@ export function ToastProvider({ children }) {
               key={t.id}
               style={{
                 backgroundColor: '#0F172A',
-                boxShadow: '0 20px 30px -10px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(255, 255, 255, 0.08)',
+                boxShadow: '0 20px 35px -8px rgba(0, 0, 0, 0.75), 0 0 0 1px rgba(255, 255, 255, 0.12)',
               }}
-              className="pointer-events-auto relative overflow-hidden flex items-start gap-3.5 p-4 rounded-2xl border border-slate-800 transition-all duration-300 animate-in slide-in-from-top-4"
+              className="pointer-events-auto relative overflow-hidden flex items-start gap-3.5 p-4 rounded-2xl border border-slate-700/80 transition-all duration-300 animate-in slide-in-from-top-4"
             >
               {/* Left Accent Color Stripe */}
               <div
@@ -142,7 +142,7 @@ export function ToastProvider({ children }) {
                     {t.title}
                   </h4>
                 )}
-                <p className="text-[12px] text-slate-300 mt-1 leading-snug break-words font-medium">
+                <p className="text-[12px] text-slate-200 mt-1 leading-snug break-words font-medium">
                   {t.message}
                 </p>
               </div>
