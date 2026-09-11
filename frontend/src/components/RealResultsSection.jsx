@@ -70,6 +70,31 @@ const defaultVideoCards = [
   },
 ]
 
+const fallbackPosters = [
+  '/images/hero1.jpg',
+  '/images/hero2.jpg',
+  '/images/sensein-mask.jpg',
+  '/images/sensein-serum.jpg',
+  '/images/sensein-perfume.jpg',
+]
+
+function getCardPoster(card, idx) {
+  if (card?.poster && typeof card.poster === 'string' && card.poster.trim()) {
+    return card.poster.trim()
+  }
+  if (card?.image && typeof card.image === 'string' && card.image.trim()) {
+    return card.image.trim()
+  }
+  return fallbackPosters[idx % fallbackPosters.length]
+}
+
+function getCardVideoSrc(card, idx) {
+  if (card?.videoSrc && typeof card.videoSrc === 'string' && card.videoSrc.trim()) {
+    return card.videoSrc.trim()
+  }
+  return defaultVideoCards[idx % defaultVideoCards.length]?.videoSrc || '/hero-video.mp4'
+}
+
 // Intelligent helper to resolve the exact product category
 function resolveCategory(card) {
   if (!card) return 'LUXURY HAIRCARE'
@@ -231,11 +256,10 @@ export default function RealResultsSection({ config }) {
     videoRefs.current.forEach((video, idx) => {
       if (video) {
         if (idx === activeIndex) {
-          video.currentTime = 0
-          video.muted = isMuted
-          if (!isMuted) {
-            // Apply current scroll volume
-            if (sectionRef.current) {
+          try {
+            video.currentTime = 0
+            video.muted = isMuted
+            if (!isMuted && sectionRef.current) {
               const rect = sectionRef.current.getBoundingClientRect()
               const windowHeight = window.innerHeight
               const sectionCenter = rect.top + rect.height / 2
@@ -247,14 +271,26 @@ export default function RealResultsSection({ config }) {
               video.volume = Number(dynamicVolume.toFixed(2))
               video.muted = dynamicVolume < 0.02
             }
+            const playPromise = video.play()
+            if (playPromise !== undefined) {
+              playPromise.catch(() => {
+                if (!video.muted) {
+                  video.muted = true
+                  video.play().catch(() => {})
+                }
+              })
+            }
+          } catch (e) {
+            console.warn('Video playback notice:', e)
           }
-          video.play().catch(() => {})
         } else {
-          video.pause()
+          try {
+            video.pause()
+          } catch (e) {}
         }
       }
     })
-  }, [activeIndex, isMuted])
+  }, [activeIndex, isMuted, videoCards])
 
   const toggleVolume = (e) => {
     if (e) {
@@ -430,10 +466,12 @@ export default function RealResultsSection({ config }) {
               const isCenter = diff === 0
               const cardStyle = getCardStyle(idx)
               const cardCategory = resolveCategory(card)
+              const cardPoster = getCardPoster(card, idx)
+              const cardVideoSrc = getCardVideoSrc(card, idx)
 
               return (
                 <div
-                  key={card.id || idx}
+                  key={card.id || `reel-card-${idx}`}
                   onClick={() => setActiveIndex(idx)}
                   style={cardStyle}
                   className={`absolute w-[180px] h-[310px] sm:w-[265px] sm:h-[440px] rounded-[24px] sm:rounded-[32px] overflow-hidden transition-all duration-700 ease-[cubic-bezier(0.25,1,0.5,1)] cursor-pointer bg-black ${
@@ -469,23 +507,31 @@ export default function RealResultsSection({ config }) {
                     {/* Video Stream for Center Active Card, Lightweight Poster for Side Cards */}
                     {isCenter ? (
                       <video
+                        key={`center-reel-${idx}-${cardVideoSrc}`}
                         ref={(el) => (videoRefs.current[idx] = el)}
+                        src={cardVideoSrc}
                         muted={isMuted}
                         loop={false}
                         playsInline
                         autoPlay
                         preload="auto"
                         onEnded={nextCard}
-                        poster={card.poster}
+                        poster={cardPoster}
+                        onError={(e) => {
+                          console.warn('Reel video playback notice:', e)
+                        }}
                         className="w-full h-full object-cover"
                       >
-                        <source src={card.videoSrc} type="video/mp4" />
+                        <source src={cardVideoSrc} type="video/mp4" />
                       </video>
                     ) : (
                       <img
-                        src={card.poster}
-                        alt={card.title || card.productName}
+                        src={cardPoster}
+                        alt={card.title || card.productName || 'Sensein Reel'}
                         loading="lazy"
+                        onError={(e) => {
+                          e.target.src = fallbackPosters[idx % fallbackPosters.length]
+                        }}
                         className="w-full h-full object-cover select-none pointer-events-none"
                       />
                     )}
