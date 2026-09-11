@@ -199,6 +199,8 @@ export default function ProductsPage() {
         },
         sku: formData.sku?.trim() || '',
         hsnCode: formData.hsnCode?.trim() || '3305',
+        size: formData.size?.trim() || '250ml',
+        sizes: Array.isArray(formData.sizes) && formData.sizes.length > 0 ? formData.sizes : [formData.size?.trim() || '250ml'],
       }
 
       if (editingProduct) {

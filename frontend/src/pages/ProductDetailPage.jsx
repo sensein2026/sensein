@@ -185,31 +185,39 @@ export default function ProductDetailPage() {
 
   // Available Sizes for the current product
   const availableSizes = useMemo(() => {
-    if (Array.isArray(product.sizes) && product.sizes.length > 0) {
-      return product.sizes
+    const list = []
+    if (Array.isArray(product?.sizes) && product.sizes.length > 0) {
+      product.sizes.forEach((s) => {
+        if (s && typeof s === 'string' && s.trim()) list.push(s.trim())
+      })
     }
-    if (product.size) {
-      return [product.size]
+    if (product?.size && typeof product.size === 'string' && product.size.trim()) {
+      if (!list.includes(product.size.trim())) {
+        list.unshift(product.size.trim())
+      }
+    }
+    if (list.length > 0) {
+      return [...new Set(list)]
     }
     return ['100ml', '250ml', '500ml']
-  }, [product.sizes, product.size])
+  }, [product?.sizes, product?.size])
 
   // Interactive States
   const [selectedImage, setSelectedImage] = useState(0)
   const [quantity, setQuantity] = useState(1)
-  const [selectedSize, setSelectedSize] = useState(product.size || '250ml')
+  const [selectedSize, setSelectedSize] = useState(product?.size || '250ml')
   const [isZoomModalOpen, setIsZoomModalOpen] = useState(false)
   const [zoomPos, setZoomPos] = useState({ x: 50, y: 50, show: false })
   const [activeTab, setActiveTab] = useState('overview')
   const [showStickyHeader, setShowStickyHeader] = useState(false)
 
   useEffect(() => {
-    if (product.size) {
-      setSelectedSize(product.size)
-    } else if (availableSizes.length > 0) {
-      setSelectedSize(availableSizes[0])
+    if (availableSizes && availableSizes.length > 0) {
+      if (!selectedSize || !availableSizes.includes(selectedSize)) {
+        setSelectedSize(availableSizes[0])
+      }
     }
-  }, [product.size, availableSizes])
+  }, [availableSizes, selectedSize])
 
   // Touch & Drag Swipe Handlers for Manual Photo Rotation
   const [touchStartX, setTouchStartX] = useState(null)
@@ -436,11 +444,13 @@ export default function ProductDetailPage() {
     window.scrollTo(0, 0)
     setSelectedImage(0)
     setPincodeResult(null)
-    setSelectedSize('100ml')
+    if (availableSizes && availableSizes.length > 0) {
+      setSelectedSize(availableSizes[0])
+    }
     if (product) {
       trackProductView(product)
     }
-  }, [slug, product])
+  }, [slug, product, availableSizes])
 
   const showToast = (msg) => {
     setToastMsg(msg)
@@ -773,29 +783,34 @@ export default function ProductDetailPage() {
               <span className="text-[11px] text-stone-400 ml-auto hidden sm:inline">Inclusive of all taxes</span>
             </div>
 
-            {/* 3. Size / Volume Switcher (Single Clean Row) */}
-            <div className="space-y-1.5">
-              <div className="flex justify-between items-center text-xs">
+            {/* 3. Size / Volume Switcher */}
+            <div className="space-y-2">
+              <div className="flex items-center justify-between text-xs">
                 <span className="text-[11px] font-bold uppercase tracking-wider text-stone-500">
                   Select Size / Volume
                 </span>
-                <span className="text-xs font-bold text-[#5A3859] font-mono">{selectedSize}</span>
+                <span className="text-xs font-bold text-[#5A3859] bg-[#5A3859]/10 px-2.5 py-0.5 rounded-md font-mono">
+                  {selectedSize}
+                </span>
               </div>
               <div className="flex flex-wrap gap-2">
-                {availableSizes.map((sz) => (
-                  <button
-                    key={sz}
-                    type="button"
-                    onClick={() => setSelectedSize(sz)}
-                    className={`h-9 px-4 rounded-xl text-xs font-bold transition-all flex items-center justify-center cursor-pointer border ${
-                      selectedSize === sz
-                        ? 'bg-[#5A3859] text-white border-[#5A3859] shadow-xs'
-                        : 'bg-stone-50 text-stone-700 border-stone-200 hover:border-[#5A3859]/50 hover:bg-white'
-                    }`}
-                  >
-                    <span>{sz}</span>
-                  </button>
-                ))}
+                {availableSizes.map((sz) => {
+                  const isSelected = selectedSize === sz
+                  return (
+                    <button
+                      key={sz}
+                      type="button"
+                      onClick={() => setSelectedSize(sz)}
+                      className={`h-9 px-4 rounded-xl text-xs font-bold transition-all flex items-center justify-center cursor-pointer border ${
+                        isSelected
+                          ? 'bg-[#5A3859] text-white border-[#5A3859] shadow-sm ring-2 ring-[#5A3859]/20'
+                          : 'bg-stone-50 text-stone-700 border-stone-200 hover:border-[#5A3859]/50 hover:bg-white'
+                      }`}
+                    >
+                      <span>{sz}</span>
+                    </button>
+                  )
+                })}
               </div>
             </div>
 
