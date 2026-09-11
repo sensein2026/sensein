@@ -52,7 +52,15 @@ if (!fs.existsSync(uploadStaticDir)) {
 app.use('/uploads', express.static(uploadStaticDir))
 app.use('/uploads', express.static(path.join(process.cwd(), 'uploads')))
 
-app.use(express.json({ limit: '10mb' }))
+// Parse JSON with rawBody capture for cryptographic signature verification
+app.use(
+  express.json({
+    limit: '10mb',
+    verify: (req, res, buf) => {
+      req.rawBody = buf
+    },
+  })
+)
 app.use(express.urlencoded({ extended: true, limit: '10mb' }))
 app.use(cookieParser())
 
@@ -71,9 +79,9 @@ app.use(routes)
 app.get('/', (req, res) => {
   res.json({
     success: true,
-    message: 'Lumière Cosmetics API is running',
+    message: 'Sensein Luxury Haircare API is running',
     clientUrl: env.CLIENT_URL,
-    health: '/api/health'
+    health: '/api/health',
   })
 })
 

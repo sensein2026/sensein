@@ -1,323 +1,236 @@
-import crypto from 'crypto'
-import mongoose from 'mongoose'
 import Order from '../models/Order.js'
-import User from '../models/User.js'
 import Product from '../models/Product.js'
-import Shipment from '../models/Shipment.js'
-import { reserveStock, releaseStock, commitStock } from '../services/stockService.js'
-import {
-  transitionOrderStatus,
-  isAddressEditAllowed,
-  isPrePickupCancellationAllowed,
-} from '../services/orderStatusEngine.js'
-import {
-  pushOrderToDelhivery,
-  trackDelhiveryShipment,
-  checkDelhiveryPincode,
-  cancelDelhiveryShipment,
-  generateDelhiveryWaybill,
-  generateSortCode,
-} from '../utils/delhivery.js'
-import { getRazorpayInstance, createPaymentOrder } from './payment.controller.js'
+import AuditLog from '../models/AuditLog.js'
+import { reserveStock, convertReservation, releaseReservation, restoreOrderStock } from '../services/stockService.js'
+import { createForwardShipment, trackShipment, cancelShipment, checkPincodeServiceability } from '../services/delhiveryService.js'
+import { initiateRefund } from '../services/razorpayService.js'
+import { sendNotification } from '../services/notificationService.js'
+import { sendSuccess, sendError, sendPaginated } from '../utils/responseEnvelope.js'
+import { canTransitionOrderStatus } from '../utils/statusTransitions.js'
+import { checkOwnership } from '../middleware/auth.js'
 import { logger } from '../config/logger.js'
 
 /**
- * Generate formatted Sensein Order ID: ORD-YYYYMMDD-XXXXX
- */
-export function generateOrderNumber() {
-  const now = new Date()
-  const year = now.getFullYear()
-  const month = String(now.getMonth() + 1).padStart(2, '0')
-  const day = String(now.getDate()).padStart(2, '0')
-  const dateStr = `${year}${month}${day}`
-  const rand = Math.floor(10000 + Math.random() * 90000)
-  return `ORD-${dateStr}-${rand}`
-}
-
-/**
- * 1. Create Order (Validation, Stock Reservation, Address Auto-save, Product Snapshotting)
+ * 1. Create Order (Checkout for COD or Prepaid)
  * POST /api/orders
  */
 export const createOrder = async (req, res, next) => {
   try {
     const {
-      customerName,
-      customerEmail,
-      customerPhone,
+      items,
       shippingAddress,
       billingAddress,
-      items,
       paymentMethod = 'COD',
-      shippingMethod = 'STANDARD',
-      paymentDetails = {},
-      discount = 0,
-      shippingFee: clientShippingFee,
-      tax: clientTax,
+      customerNotes,
     } = req.body
 
-    // 1. Validate Items
     if (!items || !Array.isArray(items) || items.length === 0) {
-      return res.status(400).json({ success: false, message: 'Cart items cannot be empty' })
+      return sendError(res, 'At least one item is required to place an order.', 400, 'INVALID_ITEMS')
     }
 
-    // 2. Validate Address Fields
-    if (!shippingAddress || !shippingAddress.addressLine || !shippingAddress.postalCode) {
-      return res.status(400).json({
-        success: false,
-        message: 'Complete shipping address and PIN code are required',
-      })
+    if (!shippingAddress || !shippingAddress.fullName || !shippingAddress.phone || !shippingAddress.city) {
+      return sendError(res, 'Complete shipping address is required.', 400, 'INVALID_SHIPPING_ADDRESS')
     }
 
-    if (!customerName || !customerName.trim()) {
-      return res.status(400).json({ success: false, message: 'Customer name is required' })
-    }
-
-    if (!customerPhone || !customerPhone.trim()) {
-      return res.status(400).json({ success: false, message: 'Customer contact phone is required' })
-    }
-
-    // 3. Validate Live Product Existence, Stock & Calculate Server-Verified Subtotal & Snapshots
-    const populatedItems = []
-    let computedSubtotal = 0
-    let totalWeightGrams = 0
+    // Server-side price & item snapshot calculation
+    let calculatedSubtotal = 0
+    const snapshotItems = []
 
     for (const item of items) {
-      const prodId = item.product?._id || item.product?.id || item.product
-      let dbProduct = null
-
-      if (prodId && String(prodId).match(/^[0-9a-fA-F]{24}$/)) {
-        dbProduct = await Product.findById(prodId)
+      const prodId = item.productId || item.product || item._id
+      const prod = await Product.findById(prodId)
+      if (!prod || !prod.isActive) {
+        return sendError(res, `Product "${item.name || prodId}" is currently unavailable.`, 400, 'PRODUCT_UNAVAILABLE')
       }
 
-      const itemQty = Math.max(1, parseInt(item.quantity, 10) || 1)
-      const itemPrice = dbProduct ? dbProduct.price : Number(item.price) || 0
-      const itemWeight = dbProduct?.weight || item.weight || 250
-      const itemDimensions = dbProduct?.dimensions || item.dimensions || { length: 15, breadth: 10, height: 8 }
+      const qty = Number(item.quantity || item.qty || 1)
+      const unitPrice = Number(prod.price)
+      const lineTotal = unitPrice * qty
+      calculatedSubtotal += lineTotal
 
-      if (dbProduct) {
-        if (dbProduct.stock !== undefined && dbProduct.stock < itemQty) {
-          return res.status(400).json({
-            success: false,
-            message: `Product '${dbProduct.name}' has only ${dbProduct.stock} units available in stock.`,
-          })
-        }
-      }
-
-      computedSubtotal += itemPrice * itemQty
-      totalWeightGrams += itemWeight * itemQty
-
-      populatedItems.push({
-        product: dbProduct ? dbProduct._id : (prodId && String(prodId).match(/^[0-9a-fA-F]{24}$/) ? prodId : new Product()._id),
-        name: dbProduct ? dbProduct.name : item.name || 'Sensein Botanical Product',
-        sku: dbProduct?.sku || item.sku || '',
-        image: dbProduct ? dbProduct.mainImage : item.image || '/images/product1.jpg',
-        price: itemPrice,
-        quantity: itemQty,
-        discount: Number(item.discount) || 0,
-        tax: Number(item.tax) || 0,
-        weight: itemWeight,
-        length: itemDimensions.length || 15,
-        breadth: itemDimensions.breadth || 10,
-        height: itemDimensions.height || 8,
+      snapshotItems.push({
+        product: prod._id,
+        productId: prod._id,
+        productName: prod.name,
+        name: prod.name,
+        variantId: item.variantId || null,
+        variantName: item.variantName || '',
+        sku: prod.sku || '',
+        image: prod.mainImage || '',
+        qty,
+        quantity: qty,
+        unitPrice,
+        price: unitPrice,
+        discount: 0,
+        tax: 0,
+        finalPrice: lineTotal,
+        weight: prod.weight || 250,
+        length: prod.dimensions?.length || 15,
+        breadth: prod.dimensions?.breadth || 10,
+        height: prod.dimensions?.height || 8,
       })
     }
 
-    const calculatedShipping = clientShippingFee !== undefined ? Number(clientShippingFee) : 0
-    const calculatedDiscount = Math.max(0, Number(discount) || 0)
-    const calculatedTax = Number(clientTax) || 0
-    const calculatedTotal = Math.max(0, computedSubtotal - calculatedDiscount + calculatedShipping + calculatedTax)
+    const shippingCharge = calculatedSubtotal >= 999 ? 0 : 99
+    const totalAmount = calculatedSubtotal + shippingCharge
 
-    // 4. Generate Order ID
-    const orderNumber = generateOrderNumber()
-    const invoiceNumber = `INV-${new Date().getFullYear()}-${Math.floor(1000 + Math.random() * 9000)}`
-    const deliveryOtp = Math.floor(1000 + Math.random() * 9000).toString()
+    // Generate unique order number
+    const dateStr = new Date().toISOString().slice(0, 10).replace(/-/g, '')
+    const randSuffix = Math.floor(100000 + Math.random() * 900000)
+    const orderNumber = `SENSEIN-${dateStr}-${randSuffix}`
 
-    const daysToAdd = shippingMethod === 'PRIORITY' ? 2 : shippingMethod === 'EXPRESS' ? 3 : 4
-    const estimatedDeliveryDate = new Date(Date.now() + daysToAdd * 24 * 60 * 60 * 1000)
+    const isCod = paymentMethod.toUpperCase() === 'COD'
 
-    // 5. User Resolution & Auto-save Address
-    let userDoc = null
-    if (req.user) {
-      userDoc = await User.findById(req.user._id)
-    } else if (customerEmail) {
-      const cleanEmail = customerEmail.toLowerCase().trim()
-      userDoc = await User.findOne({ email: cleanEmail })
-    }
-
-    const userId = userDoc ? userDoc._id : undefined
-
-    if (userDoc && shippingAddress) {
-      if (!userDoc.savedAddresses) userDoc.savedAddresses = []
-      const cleanLine = shippingAddress.addressLine.trim().toLowerCase()
-      const cleanPin = shippingAddress.postalCode.trim()
-
-      const exists = userDoc.savedAddresses.some(
-        (a) => (a.addressLine || '').toLowerCase().trim() === cleanLine && (a.postalCode || '').trim() === cleanPin
-      )
-
-      if (!exists) {
-        userDoc.savedAddresses.push({
-          title: userDoc.savedAddresses.length === 0 ? 'Home' : 'Other',
-          fullName: customerName.trim(),
-          phone: customerPhone.trim(),
-          addressLine: shippingAddress.addressLine.trim(),
-          city: shippingAddress.city?.trim() || '',
-          state: shippingAddress.state?.trim() || 'Gujarat',
-          postalCode: shippingAddress.postalCode.trim(),
-          country: 'India',
-          isDefault: userDoc.savedAddresses.length === 0,
-        })
-        await userDoc.save().catch(() => {})
-      }
-    }
-
-    const isCod = paymentMethod === 'COD'
-    const initialOrderStatus = 'ACTIVE'
-    const initialFulfillmentStatus = isCod ? 'CONFIRMED' : 'NEW'
-    const initialPaymentStatus = isCod ? 'PENDING' : 'PENDING'
-    const initialCodStatus = isCod ? 'PENDING' : 'NOT_APPLICABLE'
-
-    const totalWeightKg = Math.max(0.1, totalWeightGrams / 1000)
-
-    const newOrder = new Order({
+    const order = await Order.create({
       orderNumber,
-      user: userId,
-      customerName: customerName.trim(),
-      customerEmail: (customerEmail || '').toLowerCase().trim(),
-      customerPhone: customerPhone.trim(),
+      user: req.user?._id || null,
+      customerName: shippingAddress.fullName,
+      customerEmail: req.user?.email || shippingAddress.email || 'customer@sensein.com',
+      customerPhone: shippingAddress.phone,
       shippingAddress: {
-        fullName: customerName.trim(),
-        phone: customerPhone.trim(),
-        addressLine: shippingAddress.addressLine.trim(),
-        city: shippingAddress.city?.trim() || '',
-        state: shippingAddress.state?.trim() || '',
-        postalCode: shippingAddress.postalCode.trim(),
-        country: shippingAddress.country?.trim() || 'India',
+        fullName: shippingAddress.fullName,
+        phone: shippingAddress.phone,
+        addressLine1: shippingAddress.addressLine1 || shippingAddress.addressLine || '',
+        addressLine2: shippingAddress.addressLine2 || '',
+        city: shippingAddress.city,
+        state: shippingAddress.state || 'Gujarat',
+        pincode: shippingAddress.pincode || shippingAddress.postalCode || '395010',
+        country: shippingAddress.country || 'India',
       },
       billingAddress: billingAddress || shippingAddress,
-      items: populatedItems,
-      paymentMethod,
-      shippingMethod,
-      paymentStatus: initialPaymentStatus,
-      orderStatus: initialOrderStatus,
-      fulfillmentStatus: initialFulfillmentStatus,
-      codCollectionStatus: initialCodStatus,
-      codAmount: isCod ? calculatedTotal : 0,
-      subtotal: computedSubtotal,
-      discount: calculatedDiscount,
-      shippingFee: calculatedShipping,
-      tax: calculatedTax,
-      totalAmount: calculatedTotal,
-      courierPartner: 'Delhivery Express',
-      estimatedDeliveryDate,
-      invoiceNumber,
-      deliveryOtp,
-      packageDetails: {
-        deadWeight: totalWeightKg,
-        volumetricWeight: totalWeightKg,
-        chargedWeight: totalWeightKg,
-        length: 15,
-        breadth: 10,
-        height: 8,
+      items: snapshotItems,
+      amountBreakdown: {
+        subtotal: calculatedSubtotal,
+        discount: 0,
+        shippingCharge,
+        tax: 0,
+        totalAmount,
+        paidAmount: isCod ? 0 : 0,
+        refundableAmount: isCod ? 0 : 0,
+        refundedAmount: 0,
+        currency: 'INR',
       },
-      paymentDetails: {
-        gateway: isCod ? 'Cash on Delivery' : paymentDetails.gateway || 'Razorpay',
-        transactionId: paymentDetails.transactionId || '',
-        razorpayOrderId: paymentDetails.razorpayOrderId || '',
-        razorpayPaymentId: paymentDetails.razorpayPaymentId || '',
-        upiId: paymentDetails.upiId || '',
-        cardLast4: paymentDetails.cardLast4 || '',
-        paidAt: null,
-      },
+      subtotal: calculatedSubtotal,
+      totalAmount,
+      shippingFee: shippingCharge,
+      paymentMethod: isCod ? 'COD' : 'RAZORPAY',
+      paymentStatus: 'PENDING',
+      collectionStatus: isCod ? 'PENDING' : 'NOT_APPLICABLE',
+      codAmount: isCod ? totalAmount : 0,
+      orderStatus: isCod ? 'CONFIRMED' : 'PLACED',
+      fulfillmentStatus: isCod ? 'CONFIRMED' : 'NEW',
       timeline: [
         {
-          orderId: orderNumber,
-          previousStatus: 'NONE',
-          newStatus: isCod ? 'CONFIRMED' : 'ORDER_PLACED',
-          timestamp: new Date(),
-          actor: customerName.trim(),
-          actorType: 'CUSTOMER',
-          reason: `Order created via ${paymentMethod}.`,
-          source: 'STOREFRONT_CHECKOUT',
-        },
-      ],
-      trackingHistory: [
-        {
-          status: 'ORDER_PLACED',
-          title: 'Order Placed',
-          location: 'Sensein Flagship',
-          timestamp: new Date(),
-          description: `Order ${orderNumber} created via ${paymentMethod}.`,
+          status: isCod ? 'CONFIRMED' : 'PLACED',
+          note: isCod
+            ? `Order confirmed with Cash on Delivery (₹${totalAmount}).`
+            : 'Order initiated, awaiting online payment.',
+          source: 'SYSTEM',
+          actor: 'Checkout Engine',
+          actorType: 'SYSTEM',
         },
       ],
     })
 
+    // Stock Reservation
+    const resResult = await reserveStock({
+      orderId: order._id,
+      userId: req.user?._id,
+      items: snapshotItems,
+      purpose: 'ORDER_CHECKOUT',
+    })
+
+    if (!resResult.success) {
+      await Order.findByIdAndDelete(order._id)
+      return sendError(res, resResult.message || 'Items out of stock', 400, 'OUT_OF_STOCK')
+    }
+
+    // If COD, convert reservation to permanent stock decrement immediately
     if (isCod) {
-      newOrder.trackingHistory.push({
-        status: 'CONFIRMED',
-        title: 'Order Confirmed (Cash on Delivery)',
-        location: 'Sensein Central Hub',
-        timestamp: new Date(),
-        description: `Cash on Delivery order confirmed. Payment of ₹${calculatedTotal.toLocaleString('en-IN')} will be collected at doorstep by Delhivery courier.`,
-      })
+      await convertReservation(order._id)
+      sendNotification({
+        userId: order.user,
+        orderId: order._id,
+        type: 'ORDER_CONFIRMED',
+        data: { orderNumber: order.orderNumber, totalAmount },
+      }).catch(() => {})
     }
 
-    await newOrder.save()
-
-    // 6. Reserve Stock
-    await reserveStock(populatedItems)
-
-    // 7. Auto-create initial Shipment record
-    try {
-      const initialShipment = new Shipment({
-        order: newOrder._id,
-        orderNumber: newOrder.orderNumber,
-        shipmentNumber: `SHP-${newOrder.orderNumber}-1`,
-        shipmentType: 'FORWARD',
-        courier: 'Delhivery Surface & Express B2C',
-        status: 'SHIPMENT_CREATED',
-        pickupStatus: 'PENDING',
-        origin: {
-          name: 'Sensein Central Logistics Hub',
-          addressLine: '104, Vijaynagar 2, Yogichowk',
-          city: 'Surat',
-          state: 'Gujarat',
-          postalCode: '395010',
-          phone: '7984919956',
-        },
-        destination: newOrder.shippingAddress,
-        packageDetails: {
-          weight: totalWeightKg,
-          length: 15,
-          breadth: 10,
-          height: 8,
-          chargedWeight: totalWeightKg,
-        },
-        itemsSnapshot: populatedItems,
-      })
-
-      await initialShipment.save()
-      newOrder.activeShipment = initialShipment._id
-      newOrder.shipments = [initialShipment._id]
-      await newOrder.save()
-    } catch (shpErr) {
-      logger.warn({ err: shpErr.message }, 'Initial shipment record notice')
-    }
-
-    logger.info({ orderNumber, total: calculatedTotal, method: paymentMethod }, 'New order registered successfully')
-
-    res.status(201).json({
-      success: true,
-      message: 'Order created successfully',
-      data: newOrder,
-    })
+    return sendSuccess(res, 'Order created successfully', order, 201)
   } catch (error) {
-    next(error)
+    logger.error({ err: error.message }, 'createOrder error')
+    return sendError(res, error.message || 'Failed to place order', 500, 'ORDER_CREATION_FAILED', error)
   }
 }
 
 /**
- * 2. Get Order By ID / Order Number
+ * 2. Get Orders (Customer: own orders | Admin: all with filters & pagination)
+ * GET /api/orders
+ */
+export const getOrders = async (req, res, next) => {
+  try {
+    const isAdmin = req.user && (req.user.role === 'admin' || req.user.role === 'superadmin')
+    const {
+      page = 1,
+      limit = 20,
+      status,
+      orderStatus,
+      paymentStatus,
+      search,
+      sortBy = 'createdAt',
+      sortOrder = 'desc',
+    } = req.query
+
+    const query = {}
+
+    // Customer scoping: only view own orders
+    if (!isAdmin) {
+      if (!req.user) {
+        return sendError(res, 'Please log in to view orders', 401, 'UNAUTHORIZED')
+      }
+      query.user = req.user._id
+    }
+
+    // Status filter
+    const activeStatus = status || orderStatus
+    if (activeStatus && activeStatus !== 'ALL') {
+      query.orderStatus = activeStatus
+    }
+
+    if (paymentStatus && paymentStatus !== 'ALL') {
+      query.paymentStatus = paymentStatus
+    }
+
+    // Search query
+    if (search) {
+      const regex = new RegExp(search.trim(), 'i')
+      query.$or = [
+        { orderNumber: regex },
+        { customerName: regex },
+        { customerEmail: regex },
+        { customerPhone: regex },
+        { waybill: regex },
+        { trackingNumber: regex },
+      ]
+    }
+
+    const skip = (Number(page) - 1) * Number(limit)
+    const sort = { [sortBy]: sortOrder === 'asc' ? 1 : -1 }
+
+    const [orders, total] = await Promise.all([
+      Order.find(query).sort(sort).skip(skip).limit(Number(limit)),
+      Order.countDocuments(query),
+    ])
+
+    return sendPaginated(res, 'Orders retrieved successfully', orders, page, limit, total)
+  } catch (error) {
+    logger.error({ err: error.message }, 'getOrders error')
+    return sendError(res, 'Failed to fetch orders', 500, 'GET_ORDERS_ERROR', error)
+  }
+}
+
+/**
+ * 3. Get Single Order by ID / Order Number
  * GET /api/orders/:id
  */
 export const getOrderById = async (req, res, next) => {
@@ -329,399 +242,518 @@ export const getOrderById = async (req, res, next) => {
         { orderNumber: id },
       ],
     })
-      .populate('items.product', 'name price mainImage stock slug')
-      .populate('activeShipment')
-      .populate('shipments')
-      .populate('returnRequests')
 
     if (!order) {
-      return res.status(404).json({ success: false, message: 'Order not found' })
+      return sendError(res, 'Order not found', 404, 'ORDER_NOT_FOUND')
     }
 
-    res.json({ success: true, data: order })
+    // Ownership check: customer can only view own order
+    if (req.user && !checkOwnership(order.user, req.user)) {
+      return sendError(res, 'You do not have permission to view this order', 403, 'FORBIDDEN')
+    }
+
+    return sendSuccess(res, 'Order details retrieved', order)
   } catch (error) {
-    next(error)
+    return sendError(res, 'Failed to fetch order', 500, 'GET_ORDER_ERROR', error)
   }
 }
 
 /**
- * 3. Get Logged-in User's Orders
- * GET /api/orders/my-orders
+ * 4. Get Order Tracking Timeline
+ * GET /api/orders/:id/track or GET /api/orders/:id/tracking
  */
-export const getMyOrders = async (req, res, next) => {
-  try {
-    const userEmail = req.user.email ? req.user.email.toLowerCase().trim() : ''
-    const userPhone = req.user.phone ? req.user.phone.trim() : ''
-
-    const orQueries = [{ user: req.user._id }]
-    if (userEmail) {
-      orQueries.push({
-        customerEmail: {
-          $regex: new RegExp('^' + userEmail.replace(/[-/\\^$*+?.()|[\]{}]/g, '\\$&') + '$', 'i'),
-        },
-      })
-    }
-    if (userPhone) {
-      orQueries.push({ customerPhone: userPhone })
-    }
-
-    const orders = await Order.find({ $or: orQueries })
-      .sort({ createdAt: -1 })
-      .populate('activeShipment')
-      .populate('returnRequests')
-
-    res.json({ success: true, data: orders })
-  } catch (error) {
-    next(error)
-  }
-}
-
-/**
- * 4. Get Tracking Details for a specific Order ID
- * GET /api/orders/:id/tracking
- */
-export const getOrderTrackingById = async (req, res, next) => {
+export const getOrderTracking = async (req, res, next) => {
   try {
     const { id } = req.params
     const order = await Order.findOne({
       $or: [
         { _id: id.match(/^[0-9a-fA-F]{24}$/) ? id : null },
         { orderNumber: id },
-        { trackingNumber: id },
-        { 'delhivery.waybill': id },
       ],
-    }).populate('activeShipment')
+    })
 
     if (!order) {
-      return res.status(404).json({ success: false, message: 'Tracking details not found for this reference' })
+      return sendError(res, 'Order not found', 404, 'ORDER_NOT_FOUND')
     }
 
-    const waybill = order.trackingNumber || order.activeShipment?.waybill || order.delhivery?.waybill || ''
+    // If order has a waybill, attempt live courier track
+    let liveTracking = null
+    if (order.waybill) {
+      liveTracking = await trackShipment(order.waybill)
+    }
 
-    res.json({
-      success: true,
-      data: {
-        orderId: order._id,
-        orderNumber: order.orderNumber,
-        orderStatus: order.orderStatus,
-        fulfillmentStatus: order.fulfillmentStatus,
-        paymentStatus: order.paymentStatus,
-        codCollectionStatus: order.codCollectionStatus,
-        courier: order.courierPartner || 'Delhivery Express',
-        awbNumber: waybill,
-        trackingUrl: waybill ? `https://www.delhivery.com/track/package/${waybill}` : '',
-        estimatedDeliveryDate: order.estimatedDeliveryDate,
-        shippingAddress: order.shippingAddress,
-        trackingHistory: order.trackingHistory || [],
-        timeline: order.timeline || [],
-      },
+    return sendSuccess(res, 'Order tracking details', {
+      orderNumber: order.orderNumber,
+      orderStatus: order.orderStatus,
+      fulfillmentStatus: order.fulfillmentStatus,
+      waybill: order.waybill,
+      deliveredAt: order.deliveredAt,
+      timeline: order.timeline,
+      trackingHistory: order.trackingHistory,
+      liveCourierTracking: liveTracking,
     })
   } catch (error) {
-    next(error)
+    return sendError(res, 'Failed to fetch tracking details', 500, 'GET_TRACKING_ERROR', error)
   }
 }
 
 /**
- * 5. Track Order Query Search
- * GET /api/orders/track?query=...
+ * 5. Cancel Order (Customer or Admin pre-shipment cancellation)
+ * POST /api/orders/:id/cancel
  */
-export const trackOrder = async (req, res, next) => {
+export const cancelOrder = async (req, res, next) => {
   try {
-    const { query } = req.query
-    if (!query || !query.trim()) {
-      return res.status(400).json({
-        success: false,
-        message: 'Please provide Order Number (e.g. ORD-20260910-12345), Delhivery Waybill, or registered email',
-      })
-    }
+    const { id } = req.params
+    const { reason = 'Customer requested cancellation' } = req.body
 
-    const searchRegex = new RegExp(query.trim(), 'i')
-    const orders = await Order.find({
+    const order = await Order.findOne({
       $or: [
-        { orderNumber: searchRegex },
-        { trackingNumber: searchRegex },
-        { 'delhivery.waybill': searchRegex },
-        { customerEmail: searchRegex },
-        { customerPhone: searchRegex },
+        { _id: id.match(/^[0-9a-fA-F]{24}$/) ? id : null },
+        { orderNumber: id },
       ],
     })
-      .sort({ createdAt: -1 })
-      .populate('activeShipment')
 
-    res.json({ success: true, data: orders })
+    if (!order) {
+      return sendError(res, 'Order not found', 404, 'ORDER_NOT_FOUND')
+    }
+
+    // Ownership check
+    if (req.user && !checkOwnership(order.user, req.user)) {
+      return sendError(res, 'Access denied', 403, 'FORBIDDEN')
+    }
+
+    // Cancellation check: Only allowed while PLACED, CONFIRMED, or PACKED (before physical courier dispatch)
+    const cancellableStatuses = ['PLACED', 'CONFIRMED', 'PACKED', 'ACTIVE', 'NEW', 'PROCESSING']
+    if (!cancellableStatuses.includes(order.orderStatus)) {
+      return sendError(
+        res,
+        `Order cannot be cancelled in '${order.orderStatus}' status. Package has already shipped.`,
+        409,
+        'ORDER_CANNOT_BE_CANCELLED'
+      )
+    }
+
+    // 1. Cancel Delhivery shipment if waybill was created
+    if (order.waybill) {
+      await cancelShipment(order.waybill)
+    }
+
+    // 2. Release StockReservation or Restore Real Stock (Double-restock protected)
+    if (order.paymentStatus === 'PAID' || order.paymentMethod === 'COD') {
+      await restoreOrderStock(order, req.user?.email || 'Customer', reason)
+    } else {
+      await releaseReservation(order._id)
+    }
+
+    // 3. Mark CANCELLED
+    order.orderStatus = 'CANCELLED'
+    order.fulfillmentStatus = 'CANCELLED'
+    order.cancelledAt = new Date()
+    order.cancelledBy = req.user?.email || 'Customer'
+    order.cancellationReason = reason
+
+    order.timeline.push({
+      status: 'CANCELLED',
+      note: `Order cancelled. Reason: ${reason}`,
+      source: req.user?.role === 'admin' ? 'ADMIN' : 'CUSTOMER',
+      actor: req.user?.email || 'Customer',
+      actorType: req.user?.role === 'admin' ? 'ADMIN' : 'CUSTOMER',
+      at: new Date(),
+    })
+
+    await order.save()
+
+    // 4. Auto-initiate refund if paid online
+    let refundInfo = null
+    if (order.paymentMethod === 'RAZORPAY' && order.paymentStatus === 'PAID') {
+      try {
+        refundInfo = await initiateRefund({
+          order,
+          reason: `Auto refund on order cancellation: ${reason}`,
+          initiatedBy: 'system',
+        })
+      } catch (refundErr) {
+        logger.error({ err: refundErr.message, orderNumber: order.orderNumber }, 'Auto-refund on cancel failed')
+      }
+    }
+
+    // 5. Send Notification
+    sendNotification({
+      userId: order.user,
+      orderId: order._id,
+      type: 'ORDER_CANCELLED',
+      data: { orderNumber: order.orderNumber, reason, refundInitiated: Boolean(refundInfo) },
+    }).catch(() => {})
+
+    return sendSuccess(res, 'Order cancelled successfully', {
+      orderNumber: order.orderNumber,
+      orderStatus: order.orderStatus,
+      refundInfo,
+    })
   } catch (error) {
-    next(error)
+    logger.error({ err: error.message }, 'cancelOrder error')
+    return sendError(res, error.message || 'Failed to cancel order', 500, 'CANCEL_ERROR', error)
   }
 }
 
 /**
- * 6. Update Delivery Address before physical courier pickup
- * PUT /api/orders/:id/address
+ * 6. Admin Create Forward Shipment (Idempotent)
+ * POST /api/orders/:id/shipment
+ */
+export const createShipmentForOrder = async (req, res, next) => {
+  try {
+    const { id } = req.params
+    const idempotencyKey = req.headers['idempotency-key'] || req.body.idempotencyKey
+
+    const order = await Order.findOne({
+      $or: [
+        { _id: id.match(/^[0-9a-fA-F]{24}$/) ? id : null },
+        { orderNumber: id },
+      ],
+    })
+
+    if (!order) {
+      return sendError(res, 'Order not found', 404, 'ORDER_NOT_FOUND')
+    }
+
+    if (order.orderStatus === 'CANCELLED') {
+      return sendError(res, 'Cannot create shipment for a cancelled order', 400, 'ORDER_CANCELLED')
+    }
+
+    const shipmentResult = await createForwardShipment({
+      order,
+      idempotencyKey,
+      isReplacementDispatch: false,
+    })
+
+    await AuditLog.create({
+      action: 'SHIPMENT_CREATED',
+      actor: req.user?.email || 'admin',
+      targetType: 'Order',
+      targetId: order.orderNumber,
+      reason: `Forward shipment created. Waybill: ${shipmentResult.waybill}`,
+      metadata: { waybill: shipmentResult.waybill },
+    }).catch(() => {})
+
+    return sendSuccess(res, shipmentResult.message, shipmentResult)
+  } catch (error) {
+    logger.error({ err: error.message }, 'createShipmentForOrder error')
+    return sendError(res, error.message || 'Failed to create shipment', 500, 'SHIPMENT_CREATION_FAILED', error)
+  }
+}
+
+/**
+ * 7. Admin Update Order Status (Validated against allowed-transitions map)
+ * PATCH /api/orders/:id/status or PUT /api/orders/:id/status
+ */
+export const updateOrderStatusAdmin = async (req, res, next) => {
+  try {
+    const { id } = req.params
+    const { orderStatus, reason = 'Admin status update' } = req.body
+
+    if (!orderStatus) {
+      return sendError(res, 'orderStatus is required', 400, 'STATUS_REQUIRED')
+    }
+
+    const order = await Order.findOne({
+      $or: [
+        { _id: id.match(/^[0-9a-fA-F]{24}$/) ? id : null },
+        { orderNumber: id },
+      ],
+    })
+
+    if (!order) {
+      return sendError(res, 'Order not found', 404, 'ORDER_NOT_FOUND')
+    }
+
+    // Validate allowed transition
+    const isValidTransition = canTransitionOrderStatus(order.orderStatus, orderStatus)
+    if (!isValidTransition) {
+      return sendError(
+        res,
+        `Illegal status transition from '${order.orderStatus}' to '${orderStatus}'. This transition is rejected by policy.`,
+        400,
+        'ILLEGAL_STATUS_TRANSITION'
+      )
+    }
+
+    const previousStatus = order.orderStatus
+    order.orderStatus = orderStatus
+
+    if (orderStatus === 'DELIVERED') {
+      order.deliveredAt = new Date()
+      order.fulfillmentStatus = 'DELIVERED'
+    }
+
+    order.timeline.push({
+      status: orderStatus,
+      note: reason,
+      source: 'ADMIN',
+      actor: req.user?.email || 'admin',
+      actorType: 'ADMIN',
+      at: new Date(),
+    })
+
+    await order.save()
+
+    await AuditLog.create({
+      action: 'STATUS_OVERRIDE',
+      actor: req.user?.email || 'admin',
+      targetType: 'Order',
+      targetId: order.orderNumber,
+      reason,
+      metadata: { previousStatus, newStatus: orderStatus },
+    }).catch(() => {})
+
+    return sendSuccess(res, `Order status updated to '${orderStatus}'`, order)
+  } catch (error) {
+    return sendError(res, error.message || 'Failed to update order status', 500, 'UPDATE_STATUS_ERROR', error)
+  }
+}
+
+/**
+ * 8. Admin Confirm COD Remittance
+ * POST /api/orders/:id/cod-remittance
+ */
+export const confirmCodRemittance = async (req, res, next) => {
+  try {
+    const { id } = req.params
+    const { remittanceReference = '', notes = '' } = req.body
+
+    const order = await Order.findOne({
+      $or: [
+        { _id: id.match(/^[0-9a-fA-F]{24}$/) ? id : null },
+        { orderNumber: id },
+      ],
+    })
+
+    if (!order) {
+      return sendError(res, 'Order not found', 404, 'ORDER_NOT_FOUND')
+    }
+
+    if (order.paymentMethod !== 'COD') {
+      return sendError(res, 'This order is not a Cash on Delivery order.', 400, 'NOT_COD_ORDER')
+    }
+
+    order.collectionStatus = 'REMITTED'
+    order.paymentStatus = 'PAID'
+    order.codRemittedAt = new Date()
+    order.codCollectionReference = remittanceReference
+
+    order.timeline.push({
+      status: 'COD_REMITTED',
+      note: `Courier COD cash remittance confirmed: ₹${order.codAmount}. Ref: ${remittanceReference}`,
+      source: 'ADMIN',
+      actor: req.user?.email || 'admin',
+      actorType: 'ADMIN',
+      at: new Date(),
+    })
+
+    await order.save()
+
+    await AuditLog.create({
+      action: 'COD_REMITTANCE_CONFIRMED',
+      actor: req.user?.email || 'admin',
+      targetType: 'Order',
+      targetId: order.orderNumber,
+      reason: `Marked COD remitted with ref: ${remittanceReference}`,
+      metadata: { amount: order.codAmount, remittanceReference, notes },
+    }).catch(() => {})
+
+    return sendSuccess(res, 'COD remittance confirmed successfully', order)
+  } catch (error) {
+    return sendError(res, error.message, 500, 'COD_REMITTANCE_ERROR')
+  }
+}
+
+/**
+ * 9. Admin RTO QC Inspection & Idempotent Restock Confirmation
+ * POST /api/orders/:id/restock
+ */
+export const restockRtoOrder = async (req, res, next) => {
+  try {
+    const { id } = req.params
+    const { disposition = 'SELLABLE', reason = 'RTO package received at warehouse' } = req.body
+
+    const order = await Order.findOne({
+      $or: [
+        { _id: id.match(/^[0-9a-fA-F]{24}$/) ? id : null },
+        { orderNumber: id },
+      ],
+    })
+
+    if (!order) {
+      return sendError(res, 'Order not found', 404, 'ORDER_NOT_FOUND')
+    }
+
+    // Double-restock protection
+    if (order.restockStatus === 'RESTOCKED') {
+      return sendError(res, 'This order package has already been restocked.', 409, 'ALREADY_RESTOCKED')
+    }
+
+    if (disposition === 'SELLABLE') {
+      await restoreOrderStock(order, req.user?.email || 'admin', reason)
+    } else {
+      order.restockStatus = disposition
+      order.restockedAt = new Date()
+      order.restockedBy = req.user?.email || 'admin'
+      await order.save()
+    }
+
+    return sendSuccess(res, `RTO inspection complete: items marked ${disposition}`, order)
+  } catch (error) {
+    return sendError(res, error.message, 500, 'RESTOCK_ERROR')
+  }
+}
+
+/**
+ * 10. Check Pincode Serviceability
+ * GET /api/orders/pincode-check/:code
+ */
+export const checkPincodeServiceabilityController = async (req, res, next) => {
+  try {
+    const { code } = req.params
+    const result = await checkPincodeServiceability(code)
+    return res.json(result)
+  } catch (error) {
+    return res.status(400).json({ serviceable: false, message: error.message })
+  }
+}
+
+/**
+ * 11. Update Order Delivery Address (Before physical courier pickup)
+ * PUT /api/orders/:id/address or PATCH /api/orders/:id/address
  */
 export const updateOrderAddress = async (req, res, next) => {
   try {
     const { id } = req.params
-    const { customerName, customerPhone, addressLine, city, state, postalCode } = req.body
+    const {
+      fullName,
+      phone,
+      addressLine,
+      addressLine1,
+      addressLine2,
+      city,
+      state,
+      postalCode,
+      pincode,
+      country = 'India',
+      reason = 'Customer corrected shipping address',
+    } = req.body
 
     const order = await Order.findOne({
       $or: [
         { _id: id.match(/^[0-9a-fA-F]{24}$/) ? id : null },
         { orderNumber: id },
       ],
-    }).populate('activeShipment')
+    })
 
     if (!order) {
-      return res.status(404).json({ success: false, message: 'Order not found' })
+      return sendError(res, 'Order not found', 404, 'ORDER_NOT_FOUND')
     }
 
-    // STRICT CHECK: Disallow address editing after physical pickup
-    if (!isAddressEditAllowed(order)) {
-      return res.status(400).json({
-        success: false,
-        message: 'Address editing is locked because your parcel has already been picked up.',
-      })
+    if (req.user && !checkOwnership(order.user, req.user)) {
+      return sendError(res, 'Access denied', 403, 'FORBIDDEN')
     }
 
-    const previousAddress = order.shippingAddress ? { ...order.shippingAddress } : null
-
-    if (customerName) order.customerName = customerName.trim()
-    if (customerPhone) order.customerPhone = customerPhone.trim()
-
-    const newShippingAddress = {
-      fullName: customerName ? customerName.trim() : order.shippingAddress?.fullName,
-      phone: customerPhone ? customerPhone.trim() : order.shippingAddress?.phone,
-      addressLine: addressLine ? addressLine.trim() : order.shippingAddress?.addressLine,
-      city: city ? city.trim() : order.shippingAddress?.city,
-      state: state ? state.trim() : order.shippingAddress?.state,
-      postalCode: postalCode ? postalCode.trim() : order.shippingAddress?.postalCode,
-      country: 'India',
+    // Locked status check: Only allowed before physical courier pickup
+    const lockedStatuses = ['SHIPPED', 'OUT_FOR_DELIVERY', 'DELIVERED', 'CANCELLED', 'RTO_INITIATED', 'RTO_DELIVERED']
+    if (lockedStatuses.includes(order.orderStatus)) {
+      return sendError(
+        res,
+        `Address cannot be updated after order has reached '${order.orderStatus}' status.`,
+        400,
+        'ADDRESS_LOCKED'
+      )
     }
 
-    order.shippingAddress = newShippingAddress
-    order.addressUpdatedAt = new Date()
+    const previousAddress = { ...(order.shippingAddress?.toObject?.() || order.shippingAddress) }
 
-    // Record address history
-    if (!Array.isArray(order.addressEditHistory)) order.addressEditHistory = []
-    order.addressEditHistory.unshift({
-      updatedAt: new Date(),
-      updatedBy: req.user?.role === 'ADMIN' ? 'Admin' : req.user?.name || 'Customer',
-      reason: 'Customer requested delivery address correction before physical courier pickup',
-      previous: previousAddress,
-      updated: newShippingAddress,
+    const newAddressLine = addressLine1 || addressLine || order.shippingAddress?.addressLine1 || ''
+    const newCity = city || order.shippingAddress?.city || 'Surat'
+    const newState = state || order.shippingAddress?.state || 'Gujarat'
+    const newPincode = pincode || postalCode || order.shippingAddress?.pincode || order.shippingAddress?.postalCode || '395010'
+    const newFullName = fullName || order.shippingAddress?.fullName || order.customerName || 'Customer'
+    const newPhone = phone || order.shippingAddress?.phone || order.customerPhone || '9265259954'
+
+    order.shippingAddress = {
+      fullName: newFullName,
+      phone: newPhone,
+      addressLine1: newAddressLine,
+      addressLine2: addressLine2 || '',
+      addressLine: newAddressLine,
+      city: newCity,
+      state: newState,
+      pincode: newPincode,
+      postalCode: newPincode,
+      country,
+    }
+
+    order.customerName = newFullName
+    order.customerPhone = newPhone
+
+    order.timeline.push({
+      status: 'ADDRESS_UPDATED',
+      note: `Delivery address updated: ${newAddressLine}, ${newCity}, ${newState} - ${newPincode}`,
+      source: req.user?.role === 'admin' ? 'ADMIN' : 'CUSTOMER',
+      actor: req.user?.email || 'Customer',
+      actorType: req.user?.role === 'admin' ? 'ADMIN' : 'CUSTOMER',
+      at: new Date(),
     })
 
-    // If active shipment already has AWB generated before pickup, void old shipment & generate new shipment
-    if (order.activeShipment && order.activeShipment.waybill) {
-      try {
-        await cancelDelhiveryShipment(order.activeShipment.waybill).catch(() => {})
-        order.activeShipment.isActive = false
-        order.activeShipment.status = 'CANCELLED'
-        order.activeShipment.cancellationReason = 'Address modified by customer before pickup'
-        await order.activeShipment.save()
+    await order.save()
 
-        // Generate new active shipment
-        const newWaybill = generateDelhiveryWaybill()
-        const newShipment = new Shipment({
-          order: order._id,
-          orderNumber: order.orderNumber,
-          shipmentNumber: `SHP-${order.orderNumber}-${(order.shipments?.length || 1) + 1}`,
-          shipmentType: 'ADDRESS_CHANGE',
-          parentShipmentId: order.activeShipment._id,
-          courier: 'Delhivery Surface & Express B2C',
-          waybill: newWaybill,
-          status: 'READY_FOR_PICKUP',
-          pickupStatus: 'SCHEDULED',
-          destination: newShippingAddress,
-          itemsSnapshot: order.items,
-        })
-        await newShipment.save()
-        order.activeShipment = newShipment._id
-        if (!Array.isArray(order.shipments)) order.shipments = []
-        order.shipments.push(newShipment._id)
-        order.trackingNumber = newWaybill
-        order.needsRelabel = true
-        order.addressUpdatedAfterManifest = true
-      } catch (shpErr) {
-        logger.warn({ err: shpErr.message }, 'Shipment re-manifestation notice')
-      }
-    }
+    await AuditLog.create({
+      action: 'ADDRESS_UPDATED',
+      actor: req.user?.email || 'Customer',
+      targetType: 'Order',
+      targetId: order.orderNumber,
+      reason,
+      metadata: { previousAddress, updatedAddress: order.shippingAddress },
+    }).catch(() => {})
 
-    await transitionOrderStatus(
-      order,
-      {},
-      {
-        actor: req.user?.email || 'Customer',
-        actorType: req.user?.role === 'ADMIN' ? 'ADMIN' : 'CUSTOMER',
-        reason: `Delivery address updated to ${newShippingAddress.addressLine}, ${newShippingAddress.city}, ${newShippingAddress.state} - ${newShippingAddress.postalCode}.`,
-        source: 'ADDRESS_EDIT',
-      }
-    )
-
-    res.json({
-      success: true,
-      message: 'Delivery address updated successfully!',
-      data: order,
-    })
+    return sendSuccess(res, 'Order delivery address updated successfully', order)
   } catch (error) {
-    next(error)
+    logger.error({ err: error.message }, 'updateOrderAddress error')
+    return sendError(res, error.message || 'Failed to update order address', 500, 'ADDRESS_UPDATE_ERROR', error)
   }
 }
 
 /**
- * 7. Cancel Order (Pre-pickup cancellation vs Post-pickup RTO)
- * POST /api/orders/:id/cancel
+ * 12. Public Track Orders by Query (Order Number, Phone, or AWB)
+ * GET /api/orders/track?query=...
  */
-export const cancelUserOrder = async (req, res, next) => {
+export const trackOrder = async (req, res, next) => {
   try {
-    const { id } = req.params
-    const { reason = 'Cancelled by customer' } = req.body || {}
+    const rawQuery = (req.query.query || req.query.q || req.query.number || req.query.waybill || '').trim()
 
-    const order = await Order.findOne({
+    if (!rawQuery) {
+      return sendSuccess(res, 'Please enter an order number or AWB', [])
+    }
+
+    const cleanQuery = rawQuery.replace(/^[#]/, '').trim()
+    const regex = new RegExp(`^${cleanQuery}$|${cleanQuery}`, 'i')
+
+    const orders = await Order.find({
       $or: [
-        { _id: id.match(/^[0-9a-fA-F]{24}$/) ? id : null },
-        { orderNumber: id },
+        { orderNumber: regex },
+        { trackingNumber: cleanQuery },
+        { waybill: cleanQuery },
+        { 'delhivery.waybill': cleanQuery },
+        { customerPhone: cleanQuery },
+        { 'shippingAddress.phone': cleanQuery },
       ],
-    }).populate('activeShipment')
+    }).sort({ createdAt: -1 }).limit(5)
 
-    if (!order) {
-      return res.status(404).json({ success: false, message: 'Order not found' })
+    if (orders.length === 0) {
+      return sendSuccess(res, 'No shipments found matching query', [])
     }
 
-    if (order.orderStatus === 'CANCELLED') {
-      return res.status(400).json({ success: false, message: 'Order is already cancelled' })
-    }
-
-    const isPrePickup = isPrePickupCancellationAllowed(order)
-
-    if (isPrePickup) {
-      // 1. Pre-pickup cancellation
-      if (order.activeShipment && order.activeShipment.waybill) {
-        await cancelDelhiveryShipment(order.activeShipment.waybill).catch(() => {})
-        order.activeShipment.status = 'CANCELLED'
-        order.activeShipment.isActive = false
-        await order.activeShipment.save()
-      }
-
-      // 2. Release reserved stock
-      await releaseStock(order.items)
-
-      // 3. Handle Prepaid Razorpay Refund if order is PAID
-      let refundMessage = ''
-      if (order.paymentStatus === 'PAID' && order.paymentMethod !== 'COD') {
-        const paymentId = order.paymentDetails?.razorpayPaymentId
-        const refundAmount = order.totalAmount || order.subtotal || 0
-        const razorpayInstance = getRazorpayInstance()
-        let razorpayRefund = null
-
-        if (razorpayInstance && paymentId && !paymentId.startsWith('dummy')) {
-          try {
-            const refundPaise = Math.round(refundAmount * 100)
-            razorpayRefund = await razorpayInstance.payments.refund(paymentId, {
-              amount: refundPaise,
-              notes: {
-                orderNumber: order.orderNumber,
-                reason: `Customer pre-pickup cancellation: ${reason}`,
-              },
-            })
-          } catch (rzpErr) {
-            logger.error({ err: rzpErr }, 'Razorpay refund error on cancellation')
-            order.refundStatus = 'FAILED'
-            order.refundDetails = {
-              refundAmount,
-              status: 'FAILED',
-              failureReason: rzpErr.error?.description || rzpErr.message || 'Razorpay refund API error',
-            }
-          }
-        }
-
-        const refundId = razorpayRefund?.id || (paymentId ? `rfnd_sim_${Date.now()}` : null)
-        if (refundId && order.refundStatus !== 'FAILED') {
-          order.paymentStatus = 'REFUNDED'
-          order.refundStatus = 'COMPLETED'
-          order.refundDetails = {
-            razorpayRefundId: refundId,
-            refundAmount,
-            refundedAt: new Date(),
-            refundReason: `Customer pre-pickup cancellation: ${reason}`,
-            status: 'COMPLETED',
-          }
-          refundMessage = ` Refund of ₹${refundAmount} has been initiated via Razorpay (Refund ID: ${refundId}).`
-        } else if (order.refundStatus === 'FAILED') {
-          refundMessage = ' Cancellation recorded, but payment refund gateway returned an error. Admin will retry refund shortly.'
-        }
-      }
-
-      // 4. Mark CANCELLED
-      order.orderStatus = 'CANCELLED'
-      order.fulfillmentStatus = 'CANCELLED'
-
-      await transitionOrderStatus(
-        order,
-        {
-          orderStatus: 'CANCELLED',
-          fulfillmentStatus: 'CANCELLED',
-          paymentStatus: order.paymentStatus,
-          refundStatus: order.refundStatus || 'NONE',
-        },
-        {
-          actor: req.user?.email || 'Customer',
-          actorType: 'CUSTOMER',
-          reason: `${reason}.${refundMessage}`,
-          source: 'CUSTOMER_CANCEL',
-        }
-      )
-
-      return res.json({
-        success: true,
-        message: `Order cancelled successfully. Reserved stock has been released.${refundMessage}`,
-        data: order,
-      })
-    } else {
-      // 2. Post-pickup cancellation -> RTO flow
-      order.orderStatus = 'RTO'
-      order.rtoStatus = 'REQUESTED'
-
-      await transitionOrderStatus(
-        order,
-        {
-          orderStatus: 'RTO',
-          rtoStatus: 'REQUESTED',
-        },
-        {
-          actor: req.user?.email || 'Customer',
-          actorType: 'CUSTOMER',
-          reason: `Post-pickup cancellation requested: ${reason}. Package in transit to be returned to origin.`,
-          source: 'RTO_INITIATED',
-        }
-      )
-
-      return res.json({
-        success: true,
-        message: 'Cancellation requested. As your parcel was already picked up by courier, Return to Origin (RTO) has been initiated.',
-        data: order,
-      })
-    }
+    return sendSuccess(res, `Found ${orders.length} order(s)`, orders)
   } catch (error) {
-    next(error)
+    logger.error({ err: error.message }, 'trackOrder error')
+    return sendError(res, error.message || 'Tracking search error', 500, 'TRACK_SEARCH_ERROR', error)
   }
 }
 
-/**
- * 8. Check PIN Code Serviceability (Delhivery)
- * GET /api/orders/pincode-check/:code
- */
-export const checkPincode = async (req, res, next) => {
-  try {
-    const { code } = req.params
-    const result = await checkDelhiveryPincode(code)
-    res.json({
-      success: true,
-      data: result,
-    })
-  } catch (error) {
-    next(error)
-  }
-}
-export const createRazorpayOrder = createPaymentOrder;
-export { verifyPayment as verifyRazorpaySignature } from './payment.controller.js'
-export { processRefund as refundRazorpayPayment } from './payment.controller.js'
+

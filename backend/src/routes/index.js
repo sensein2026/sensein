@@ -4,12 +4,14 @@ import productRoutes from './product.routes.js'
 import categoryRoutes from './category.routes.js'
 import cartRoutes from './cart.routes.js'
 import orderRoutes from './order.routes.js'
+import replacementRoutes from './replacement.routes.js'
 import authRoutes from './auth.routes.js'
 import adminRoutes from './admin.routes.js'
 import homepageRoutes from './homepage.routes.js'
 import bulkOrderRoutes from './bulkOrder.routes.js'
 import paymentRoutes from './payment.routes.js'
 import shippingRoutes from './shipping.routes.js'
+import delhiveryRoutes from './delhivery.routes.js'
 import webhookRoutes from './webhook.routes.js'
 import analyticsRoutes from './analytics.routes.js'
 import siteSettingsRoutes from './siteSettings.routes.js'
@@ -26,11 +28,11 @@ router.use('/products', productRoutes)
 router.use('/categories', categoryRoutes)
 router.use('/cart', cartRoutes)
 router.use('/orders', orderRoutes)
-router.use('/returns', returnRoutes)
+router.use('/replacements', replacementRoutes)
+router.use('/returns', returnRoutes) // Backward compatibility alias
 router.use('/coupons', couponRoutes)
 router.use('/payment', paymentRoutes)
-router.post('/create-order', optionalAuth, createPaymentOrder)
-router.post('/verify-payment', optionalAuth, verifyPayment)
+router.use('/delhivery', delhiveryRoutes)
 router.use('/shipping', shippingRoutes)
 router.use('/webhooks', webhookRoutes)
 router.use('/admin', adminRoutes)
@@ -38,5 +40,9 @@ router.use('/homepage', homepageRoutes)
 router.use('/bulk-orders', bulkOrderRoutes)
 router.use('/analytics', analyticsRoutes)
 router.use('/site-settings', siteSettingsRoutes)
+
+// Root API level quick checkout routes
+router.post('/create-order', optionalAuth, createPaymentOrder)
+router.post('/verify-payment', optionalAuth, verifyPayment)
 
 export default router

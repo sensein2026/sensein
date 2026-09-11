@@ -981,27 +981,6 @@ export default function GiftsPage() {
             </div>
           </div>
         )}
-
-        {/* Submit Actions */}
-        <div className="flex items-center justify-end gap-3 pt-2">
-          <button
-            type="submit"
-            disabled={isSaving}
-            className="flex items-center gap-2 px-8 py-3.5 bg-purple-600 hover:bg-purple-700 active:bg-purple-800 text-white text-xs font-bold rounded-xl shadow-lg shadow-purple-500/25 transition-all cursor-pointer disabled:opacity-50"
-          >
-            {isSaving ? (
-              <>
-                <RefreshCw className="h-4 w-4 animate-spin" />
-                <span>Saving All Settings...</span>
-              </>
-            ) : (
-              <>
-                <Save className="h-4 w-4" />
-                <span>Save {formData.cartProgressMode === 'simple' ? 'Free Shipping' : 'Milestone & Gift'} Settings</span>
-              </>
-            )}
-          </button>
-        </div>
       </form>
     </div>
   )

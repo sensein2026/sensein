@@ -1,0 +1,157 @@
+/**
+ * State Transition Maps for Order, Payment, COD Collection, and Replacement.
+ * Strict validation maps to prevent illegal status transitions.
+ */
+
+export const ORDER_STATUS = {
+  PLACED: 'PLACED',
+  CONFIRMED: 'CONFIRMED',
+  PACKED: 'PACKED',
+  SHIPPED: 'SHIPPED',
+  OUT_FOR_DELIVERY: 'OUT_FOR_DELIVERY',
+  DELIVERED: 'DELIVERED',
+  NDR_PENDING: 'NDR_PENDING',
+  RTO_INITIATED: 'RTO_INITIATED',
+  RTO_IN_TRANSIT: 'RTO_IN_TRANSIT',
+  RTO_DELIVERED: 'RTO_DELIVERED',
+  CANCELLED: 'CANCELLED',
+  // Backward compatibility
+  ACTIVE: 'ACTIVE',
+  COMPLETED: 'COMPLETED',
+  PROCESSING: 'PROCESSING',
+}
+
+export const PAYMENT_STATUS = {
+  PENDING: 'PENDING',
+  PAID: 'PAID',
+  REFUND_INITIATED: 'REFUND_INITIATED',
+  REFUNDED: 'REFUNDED',
+  FAILED: 'FAILED',
+}
+
+export const COLLECTION_STATUS = {
+  NOT_APPLICABLE: 'NOT_APPLICABLE',
+  PENDING: 'PENDING',
+  COLLECTED: 'COLLECTED',
+  REMITTED: 'REMITTED',
+  FAILED: 'FAILED',
+}
+
+export const REPLACEMENT_STATUS = {
+  REQUESTED: 'REQUESTED',
+  APPROVED: 'APPROVED',
+  REJECTED: 'REJECTED',
+  REVERSE_PICKUP_SCHEDULED: 'REVERSE_PICKUP_SCHEDULED',
+  REVERSE_PICKUP_PICKED: 'REVERSE_PICKUP_PICKED',
+  REVERSE_IN_TRANSIT: 'REVERSE_IN_TRANSIT',
+  REVERSE_RECEIVED_AT_WAREHOUSE: 'REVERSE_RECEIVED_AT_WAREHOUSE',
+  QC_PENDING: 'QC_PENDING',
+  QC_PASSED: 'QC_PASSED',
+  QC_FAILED: 'QC_FAILED',
+  REPLACEMENT_SHIPPED: 'REPLACEMENT_SHIPPED',
+  REPLACEMENT_OUT_FOR_DELIVERY: 'REPLACEMENT_OUT_FOR_DELIVERY',
+  REPLACEMENT_DELIVERED: 'REPLACEMENT_DELIVERED',
+  CONVERTED_TO_REFUND: 'CONVERTED_TO_REFUND',
+  CANCELLED: 'CANCELLED',
+}
+
+export const REPLACEMENT_ITEM_STATUS = {
+  REQUESTED: 'REQUESTED',
+  APPROVED: 'APPROVED',
+  PICKUP_COMPLETED: 'PICKUP_COMPLETED',
+  QC_PENDING: 'QC_PENDING',
+  QC_PASSED: 'QC_PASSED',
+  QC_FAILED: 'QC_FAILED',
+  REPLACEMENT_SHIPPED: 'REPLACEMENT_SHIPPED',
+  REPLACEMENT_DELIVERED: 'REPLACEMENT_DELIVERED',
+  REJECTED: 'REJECTED',
+  CANCELLED: 'CANCELLED',
+}
+
+/**
+ * Allowed transitions map for Order.orderStatus
+ */
+export const ALLOWED_ORDER_TRANSITIONS = {
+  PLACED: ['CONFIRMED', 'CANCELLED', 'ACTIVE'],
+  CONFIRMED: ['PACKED', 'SHIPPED', 'CANCELLED', 'ACTIVE'],
+  PACKED: ['SHIPPED', 'CANCELLED'],
+  SHIPPED: ['OUT_FOR_DELIVERY', 'NDR_PENDING', 'RTO_INITIATED'],
+  OUT_FOR_DELIVERY: ['DELIVERED', 'NDR_PENDING', 'RTO_INITIATED', 'SHIPPED'],
+  NDR_PENDING: ['OUT_FOR_DELIVERY', 'RTO_INITIATED', 'SHIPPED'],
+  RTO_INITIATED: ['RTO_IN_TRANSIT', 'RTO_DELIVERED'],
+  RTO_IN_TRANSIT: ['RTO_DELIVERED'],
+  RTO_DELIVERED: [], // Terminal but triggers QC / restock
+  DELIVERED: [], // Terminal for forward flow; replacement is independent
+  CANCELLED: [], // Terminal
+  ACTIVE: ['CONFIRMED', 'PACKED', 'SHIPPED', 'OUT_FOR_DELIVERY', 'DELIVERED', 'CANCELLED'], // Compat
+}
+
+/**
+ * Allowed transitions map for Order.paymentStatus
+ */
+export const ALLOWED_PAYMENT_TRANSITIONS = {
+  PENDING: ['PAID', 'FAILED'],
+  PAID: ['REFUND_INITIATED', 'REFUNDED'],
+  REFUND_INITIATED: ['REFUNDED', 'PAID'], // Can revert if refund fails
+  REFUNDED: [],
+  FAILED: ['PENDING', 'PAID'], // Can retry payment
+}
+
+/**
+ * Allowed transitions map for Order.collectionStatus (COD)
+ */
+export const ALLOWED_COLLECTION_TRANSITIONS = {
+  NOT_APPLICABLE: ['PENDING'],
+  PENDING: ['COLLECTED', 'FAILED'],
+  COLLECTED: ['REMITTED', 'FAILED'],
+  REMITTED: [],
+  FAILED: ['PENDING', 'COLLECTED'],
+}
+
+/**
+ * Allowed transitions map for Replacement.status
+ */
+export const ALLOWED_REPLACEMENT_TRANSITIONS = {
+  REQUESTED: ['APPROVED', 'REJECTED', 'CANCELLED', 'CONVERTED_TO_REFUND'],
+  APPROVED: ['REVERSE_PICKUP_SCHEDULED', 'REPLACEMENT_SHIPPED', 'CANCELLED', 'CONVERTED_TO_REFUND'], // parallel dispatch can go directly to REPLACEMENT_SHIPPED
+  REJECTED: [],
+  CANCELLED: [],
+  REVERSE_PICKUP_SCHEDULED: ['REVERSE_PICKUP_PICKED', 'REVERSE_RECEIVED_AT_WAREHOUSE', 'CANCELLED', 'CONVERTED_TO_REFUND'],
+  REVERSE_PICKUP_PICKED: ['REVERSE_IN_TRANSIT', 'REVERSE_RECEIVED_AT_WAREHOUSE', 'CONVERTED_TO_REFUND'],
+  REVERSE_IN_TRANSIT: ['REVERSE_RECEIVED_AT_WAREHOUSE', 'CONVERTED_TO_REFUND'],
+  REVERSE_RECEIVED_AT_WAREHOUSE: ['QC_PENDING', 'QC_PASSED', 'QC_FAILED', 'CONVERTED_TO_REFUND'],
+  QC_PENDING: ['QC_PASSED', 'QC_FAILED', 'CONVERTED_TO_REFUND'],
+  QC_PASSED: ['REPLACEMENT_SHIPPED', 'CONVERTED_TO_REFUND'],
+  QC_FAILED: ['CONVERTED_TO_REFUND', 'REJECTED'],
+  REPLACEMENT_SHIPPED: ['REPLACEMENT_OUT_FOR_DELIVERY', 'REPLACEMENT_DELIVERED', 'CONVERTED_TO_REFUND'],
+  REPLACEMENT_OUT_FOR_DELIVERY: ['REPLACEMENT_DELIVERED', 'REPLACEMENT_SHIPPED', 'CONVERTED_TO_REFUND'],
+  REPLACEMENT_DELIVERED: [], // Terminal
+  CONVERTED_TO_REFUND: [], // Terminal
+}
+
+/**
+ * Validate order status transition
+ */
+export function canTransitionOrderStatus(currentStatus, targetStatus) {
+  if (currentStatus === targetStatus) return true
+  const allowed = ALLOWED_ORDER_TRANSITIONS[currentStatus] || []
+  return allowed.includes(targetStatus)
+}
+
+/**
+ * Validate payment status transition
+ */
+export function canTransitionPaymentStatus(currentStatus, targetStatus) {
+  if (currentStatus === targetStatus) return true
+  const allowed = ALLOWED_PAYMENT_TRANSITIONS[currentStatus] || []
+  return allowed.includes(targetStatus)
+}
+
+/**
+ * Validate replacement status transition
+ */
+export function canTransitionReplacementStatus(currentStatus, targetStatus) {
+  if (currentStatus === targetStatus) return true
+  const allowed = ALLOWED_REPLACEMENT_TRANSITIONS[currentStatus] || []
+  return allowed.includes(targetStatus)
+}

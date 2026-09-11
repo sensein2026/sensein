@@ -1,13 +1,20 @@
 import { Router } from 'express'
 import Order from '../models/Order.js'
-import Shipment from '../models/Shipment.js'
-import { transitionOrderStatus } from '../services/orderStatusEngine.js'
+import ProcessedWebhookEvent from '../models/ProcessedWebhookEvent.js'
+import { handleRazorpayWebhook } from '../controllers/payment.controller.js'
+import { DELHIVERY_STATUS_MAP } from '../services/delhiveryService.js'
 import { logger } from '../config/logger.js'
 
 const router = Router()
 
 /**
- * Delhivery & Courier Webhook Endpoint (Idempotent & Multi-status aware)
+ * Razorpay Webhook Endpoint
+ * POST /api/webhooks/razorpay
+ */
+router.post('/razorpay', handleRazorpayWebhook)
+
+/**
+ * Delhivery Courier Webhook Endpoint (Idempotent via ProcessedWebhookEvent)
  * POST /api/webhooks/delhivery
  */
 router.post('/delhivery', async (req, res, next) => {
@@ -20,108 +27,76 @@ router.post('/delhivery', async (req, res, next) => {
     const incomingStatus = (payload.status || payload.event || '').toUpperCase().trim()
     const location = payload.location || payload.city || 'Transit Center'
     const description = payload.description || payload.message || `Shipment status: ${incomingStatus}`
-    const externalEventId = payload.event_id || payload.scans?.[0]?.scan_id || `${awb}-${incomingStatus}-${Date.now()}`
+    const eventId = payload.event_id || payload.scans?.[0]?.scan_id || `${awb}-${incomingStatus}-${Date.now()}`
 
     if (!orderId && !awb) {
-      return res.status(400).json({ success: false, message: 'Missing order_id or waybill/awb in webhook payload' })
+      return res.status(200).json({ success: false, message: 'Missing order_id or waybill' })
+    }
+
+    // Database-Level Idempotency Check
+    try {
+      await ProcessedWebhookEvent.create({
+        provider: 'delhivery',
+        eventId,
+        payloadSummary: { awb, incomingStatus, location },
+      })
+    } catch (err) {
+      if (err.code === 11000) {
+        logger.info({ eventId }, 'Duplicate Delhivery webhook skipped')
+        return res.status(200).json({ success: true, message: 'Event already processed' })
+      }
+      throw err
     }
 
     const order = await Order.findOne({
       $or: [
         { orderNumber: orderId },
+        { waybill: awb },
         { trackingNumber: awb },
         { 'delhivery.waybill': awb },
       ],
-    }).populate('activeShipment')
+    })
 
     if (!order) {
-      logger.warn({ orderId, awb }, 'Order not found for Delhivery webhook event')
-      return res.status(404).json({ success: false, message: 'Order not found' })
+      logger.warn({ orderId, awb }, 'Order not found for Delhivery webhook')
+      return res.status(200).json({ success: false, message: 'Order not found' })
     }
 
-    // Idempotency: check if this external event was already recorded in order timeline
-    const alreadyProcessed = order.timeline?.some((t) => t.externalEventId === externalEventId)
-    if (alreadyProcessed) {
-      logger.info({ orderNumber: order.orderNumber, externalEventId }, 'Duplicate webhook event skipped')
-      return res.status(200).json({ success: true, message: 'Event already processed' })
-    }
+    const mapped = DELHIVERY_STATUS_MAP[incomingStatus] || { orderStatus: 'SHIPPED', fulfillmentStatus: 'IN_TRANSIT' }
 
-    // Map Courier Status to Separated Lifecycle States
-    let targetFulfillment = order.fulfillmentStatus
-    let targetOrderStatus = order.orderStatus
-    let targetPaymentStatus = order.paymentStatus
-    let targetCodStatus = order.codCollectionStatus
-    let targetRtoStatus = order.rtoStatus
+    order.orderStatus = mapped.orderStatus || order.orderStatus
+    order.fulfillmentStatus = mapped.fulfillmentStatus || order.fulfillmentStatus
 
-    if (incomingStatus.includes('DELIVERED')) {
-      targetFulfillment = 'DELIVERED'
-      if (order.paymentMethod === 'COD') {
-        // If COD courier confirmation indicates cash received
-        targetCodStatus = 'COLLECTED'
-        targetPaymentStatus = 'PAID'
+    if (incomingStatus.includes('DELIVERED') || mapped.orderStatus === 'DELIVERED') {
+      order.deliveredAt = new Date()
+      if (order.paymentMethod === 'COD' && order.collectionStatus === 'PENDING') {
+        order.collectionStatus = 'COLLECTED'
         order.codCollectedAt = new Date()
       }
-      targetOrderStatus = 'ACTIVE'
-    } else if (incomingStatus.includes('OUT_FOR_DELIVERY') || incomingStatus.includes('OFD')) {
-      targetFulfillment = 'OUT_FOR_DELIVERY'
-    } else if (incomingStatus.includes('IN_TRANSIT') || incomingStatus.includes('REACHED') || incomingStatus.includes('TRANSIT')) {
-      targetFulfillment = 'IN_TRANSIT'
-    } else if (incomingStatus.includes('PICKED_UP') || incomingStatus.includes('PICKED') || incomingStatus.includes('INVOICED')) {
-      targetFulfillment = 'PICKED_UP'
-    } else if (incomingStatus.includes('MANIFEST') || incomingStatus.includes('BOOKED')) {
-      targetFulfillment = 'READY_FOR_PICKUP'
-    } else if (incomingStatus.includes('RTO') || incomingStatus.includes('RETURN')) {
-      targetOrderStatus = 'RTO'
-      targetRtoStatus = incomingStatus.includes('DELIVERED') ? 'DELIVERED' : 'IN_TRANSIT'
     }
 
-    // Update active shipment if linked
-    if (order.activeShipment) {
-      order.activeShipment.status = targetFulfillment
-      if (targetFulfillment === 'PICKED_UP') order.activeShipment.pickedUpAt = new Date()
-      if (targetFulfillment === 'DELIVERED') order.activeShipment.deliveredAt = new Date()
-      if (!Array.isArray(order.activeShipment.webhookEvents)) order.activeShipment.webhookEvents = []
-      order.activeShipment.webhookEvents.push({
-        receivedAt: new Date(),
-        event: incomingStatus,
-        status: targetFulfillment,
-        location,
-        description,
-        raw: payload,
-      })
-      await order.activeShipment.save().catch(() => {})
-    }
+    order.timeline.push({
+      status: mapped.orderStatus || incomingStatus,
+      note: description,
+      location,
+      source: 'DELHIVERY',
+      actor: 'Delhivery Webhook',
+      actorType: 'COURIER',
+      externalEventId: eventId,
+      at: new Date(),
+    })
 
-    await transitionOrderStatus(
-      order,
-      {
-        orderStatus: targetOrderStatus,
-        fulfillmentStatus: targetFulfillment,
-        paymentStatus: targetPaymentStatus,
-        codCollectionStatus: targetCodStatus,
-        rtoStatus: targetRtoStatus,
-      },
-      {
-        actor: 'Delhivery Webhook',
-        actorType: 'COURIER',
-        reason: description,
-        source: 'DELHIVERY_WEBHOOK',
-        externalEventId,
-        metadata: { location, incomingStatus },
-      }
-    )
+    await order.save()
 
-    logger.info({ orderNumber: order.orderNumber, fulfillment: targetFulfillment }, 'Delhivery webhook applied successfully')
-
-    res.json({
+    return res.status(200).json({
       success: true,
-      message: 'Webhook event processed successfully',
+      message: 'Delhivery webhook processed successfully',
       orderNumber: order.orderNumber,
-      fulfillmentStatus: targetFulfillment,
+      orderStatus: order.orderStatus,
     })
   } catch (error) {
-    logger.error({ err: error.message }, 'Webhook handler error')
-    next(error)
+    logger.error({ err: error.message }, 'Delhivery webhook handler error')
+    return res.status(200).json({ success: false, message: error.message })
   }
 })
 

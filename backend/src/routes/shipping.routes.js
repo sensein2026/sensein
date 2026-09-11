@@ -20,6 +20,7 @@ import {
   cancelOrderShipment,
   getShippingSettings,
   updateShippingSettings,
+  simulateDelhiveryEvent,
 } from '../controllers/shipping.controller.js'
 import { protect } from '../middleware/auth.js'
 
@@ -54,6 +55,8 @@ router.get('/delhivery/check-pincode/:pincode', checkDelhiveryPincodeHandler)
 router.get('/delhivery/check-pincode', checkDelhiveryPincodeHandler)
 router.post('/delhivery/estimate', estimateDelhiveryRateHandler)
 router.post('/delhivery/cancel', protect, cancelDelhiveryOrderShipment)
+router.post('/delhivery/simulate', protect, simulateDelhiveryEvent)
+router.post('/simulate', protect, simulateDelhiveryEvent)
 
 // Standard Unified Aliases (Protected)
 router.post('/create', protect, createShipping)

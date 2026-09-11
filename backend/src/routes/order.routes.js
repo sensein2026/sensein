@@ -1,38 +1,52 @@
 import { Router } from 'express'
 import {
   createOrder,
-  getMyOrders,
+  getOrders,
   getOrderById,
-  getOrderTrackingById,
-  trackOrder,
-  checkPincode,
-  createRazorpayOrder,
-  verifyRazorpaySignature,
-  refundRazorpayPayment,
-  cancelUserOrder,
+  getOrderTracking,
+  cancelOrder,
+  createShipmentForOrder,
+  updateOrderStatusAdmin,
+  confirmCodRemittance,
+  restockRtoOrder,
+  checkPincodeServiceabilityController,
   updateOrderAddress,
+  trackOrder,
 } from '../controllers/order.controller.js'
-import { createReturnRequest } from '../controllers/return.controller.js'
-import { verifyPayment } from '../controllers/payment.controller.js'
-import { updateOrderStatus } from '../controllers/admin.controller.js'
-import { protect, optionalAuth } from '../middleware/auth.js'
+import { protect, adminOnly, optionalAuth } from '../middleware/auth.js'
+import { requireIdempotency } from '../middleware/idempotencyKey.js'
 
 const router = Router()
 
-router.post('/', optionalAuth, createOrder)
-router.get('/pincode-check/:code', checkPincode)
-router.post('/create-razorpay-order', optionalAuth, createRazorpayOrder)
-router.post('/verify-razorpay-signature', optionalAuth, verifyRazorpaySignature)
-router.post('/refund', protect, refundRazorpayPayment)
-router.post('/return', protect, createReturnRequest)
-router.post('/verify-payment', verifyPayment)
-router.get('/my-orders', protect, getMyOrders)
-router.get('/track', trackOrder)
-router.get('/:id/tracking', getOrderTrackingById)
+// Pincode serviceability check
+router.get('/pincode-check/:code', checkPincodeServiceabilityController)
+router.get('/check-pincode/:code', checkPincodeServiceabilityController)
 
-router.get('/:id', getOrderById)
-router.put('/:id/status', updateOrderStatus)
+// Public Live Search Tracking
+router.get('/track', trackOrder)
+
+// Customer & Admin Orders List
+router.get('/', optionalAuth, getOrders)
+router.get('/my-orders', protect, getOrders)
+
+// Place Order
+router.post('/', optionalAuth, createOrder)
+
+// Order Details & Tracking
+router.get('/:id/track', getOrderTracking)
+router.get('/:id/tracking', getOrderTracking)
+router.get('/:id', optionalAuth, getOrderById)
+
+// Cancellation & Address Edit
+router.post('/:id/cancel', optionalAuth, cancelOrder)
 router.put('/:id/address', optionalAuth, updateOrderAddress)
-router.post('/:id/cancel', cancelUserOrder)
+router.patch('/:id/address', optionalAuth, updateOrderAddress)
+
+// Admin Actions
+router.post('/:id/shipment', protect, adminOnly, requireIdempotency(1440), createShipmentForOrder)
+router.patch('/:id/status', protect, adminOnly, updateOrderStatusAdmin)
+router.put('/:id/status', protect, adminOnly, updateOrderStatusAdmin) // compat
+router.post('/:id/cod-remittance', protect, adminOnly, confirmCodRemittance)
+router.post('/:id/restock', protect, adminOnly, restockRtoOrder)
 
 export default router

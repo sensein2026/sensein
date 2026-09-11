@@ -30,12 +30,15 @@ export function formatFlipkartDate(dateInput) {
 export default function FlipkartOrderTimeline({ order, compact = false }) {
   if (!order) return null
 
-  const isCancelled = order.orderStatus === 'CANCELLED' || order.orderStatus === 'PAYMENT_FAILED'
-  const isDelivered = order.orderStatus === 'DELIVERED'
-  const isShipped = ['SHIPPED', 'IN_TRANSIT', 'OUT_FOR_DELIVERY', 'DELIVERED'].includes(order.orderStatus)
-  const isOutForDelivery = ['OUT_FOR_DELIVERY', 'DELIVERED'].includes(order.orderStatus)
-  const isInTransit = ['IN_TRANSIT', 'OUT_FOR_DELIVERY', 'DELIVERED'].includes(order.orderStatus)
-  const isPacked = ['PROCESSING', 'CONFIRMED', 'SHIPPED', 'IN_TRANSIT', 'OUT_FOR_DELIVERY', 'DELIVERED'].includes(order.orderStatus)
+  const fStatus = (order.fulfillmentStatus || '').toUpperCase()
+  const oStatus = (order.orderStatus || '').toUpperCase()
+
+  const isCancelled = oStatus === 'CANCELLED' || fStatus === 'CANCELLED' || oStatus === 'PAYMENT_FAILED'
+  const isDelivered = fStatus === 'DELIVERED' || oStatus === 'DELIVERED'
+  const isOutForDelivery = ['OUT_FOR_DELIVERY', 'DELIVERED'].includes(fStatus) || ['OUT_FOR_DELIVERY', 'DELIVERED'].includes(oStatus)
+  const isInTransit = ['IN_TRANSIT', 'OUT_FOR_DELIVERY', 'DELIVERED'].includes(fStatus) || ['IN_TRANSIT', 'OUT_FOR_DELIVERY', 'DELIVERED'].includes(oStatus)
+  const isShipped = ['PICKED_UP', 'SHIPPED', 'SHIPMENT_CREATED', 'READY_FOR_PICKUP', 'IN_TRANSIT', 'OUT_FOR_DELIVERY', 'DELIVERED'].includes(fStatus) || ['SHIPPED', 'IN_TRANSIT', 'OUT_FOR_DELIVERY', 'DELIVERED'].includes(oStatus)
+  const isPacked = ['CONFIRMED', 'PROCESSING', 'PACKED', 'PICKED_UP', 'SHIPPED', 'SHIPMENT_CREATED', 'READY_FOR_PICKUP', 'IN_TRANSIT', 'OUT_FOR_DELIVERY', 'DELIVERED'].includes(fStatus) || ['PROCESSING', 'CONFIRMED', 'SHIPPED', 'IN_TRANSIT', 'OUT_FOR_DELIVERY', 'DELIVERED'].includes(oStatus)
 
   const courierName = order.courierPartner || order.delhivery?.courierName || 'Delhivery Express'
   const awbNumber = order.trackingNumber || order.delhivery?.waybill || ''

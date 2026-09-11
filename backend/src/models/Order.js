@@ -1,39 +1,67 @@
 import mongoose from 'mongoose'
 
-const orderItemSchema = new mongoose.Schema({
+const orderItemSnapshotSchema = new mongoose.Schema({
   product: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Product',
     required: true,
   },
-  name: { type: String, required: true },
+  productId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Product',
+  },
+  productName: { type: String, default: '' },
+  name: { type: String, default: '' }, // compat
+  variantId: { type: String, default: null },
+  variantName: { type: String, default: '' },
   sku: { type: String, default: '' },
-  image: { type: String, required: true },
-  price: { type: Number, required: true },
-  quantity: { type: Number, required: true, min: 1 },
+  image: { type: String, default: '' },
+  qty: { type: Number, default: 1, min: 1 },
+  quantity: { type: Number, default: 1, min: 1 }, // compat
+  unitPrice: { type: Number, default: 0 },
+  price: { type: Number, default: 0 }, // compat
   discount: { type: Number, default: 0 },
   tax: { type: Number, default: 0 },
+  finalPrice: { type: Number, default: 0 },
   weight: { type: Number, default: 250 }, // in grams
   length: { type: Number, default: 15 }, // in cm
   breadth: { type: Number, default: 10 },
   height: { type: Number, default: 8 },
 })
 
+const orderAddressSnapshotSchema = new mongoose.Schema({
+  fullName: { type: String, default: 'Customer' },
+  phone: { type: String, default: '' },
+  addressLine1: { type: String, default: '' },
+  addressLine2: { type: String, default: '' },
+  addressLine: { type: String, default: '' }, // compat
+  city: { type: String, default: '' },
+  state: { type: String, default: '' },
+  pincode: { type: String, default: '' },
+  postalCode: { type: String, default: '' }, // compat
+  country: { type: String, default: 'India' },
+})
+
 const timelineEventSchema = new mongoose.Schema({
-  orderId: { type: String },
-  previousStatus: { type: String },
-  newStatus: { type: String, required: true },
-  timestamp: { type: Date, default: Date.now },
+  status: { type: String, default: 'UPDATED' },
+  newStatus: { type: String }, // compat
+  previousStatus: { type: String }, // compat
+  note: { type: String, default: '' },
+  location: { type: String, default: '' },
+  source: {
+    type: String,
+    default: 'SYSTEM',
+  },
   actor: { type: String, default: 'SYSTEM' },
   actorType: {
     type: String,
-    enum: ['CUSTOMER', 'ADMIN', 'SYSTEM', 'COURIER', 'WEBHOOK'],
     default: 'SYSTEM',
   },
   reason: { type: String, default: '' },
-  source: { type: String, default: 'API' },
   externalEventId: { type: String },
   metadata: { type: mongoose.Schema.Types.Mixed },
+  at: { type: Date, default: Date.now },
+  timestamp: { type: Date, default: Date.now }, // compat
 })
 
 const orderSchema = new mongoose.Schema(
@@ -49,182 +77,86 @@ const orderSchema = new mongoose.Schema(
       ref: 'User',
       index: true,
     },
-    customerName: { type: String, required: true },
-    customerEmail: { type: String, required: true, index: true },
-    customerPhone: { type: String, required: true, index: true },
+    customerName: { type: String, default: 'Customer' },
+    customerEmail: { type: String, default: 'customer@sensein.com', index: true },
+    customerPhone: { type: String, default: '9265259954', index: true },
+
+    // Immutable address snapshot
     shippingAddress: {
-      fullName: { type: String },
-      phone: { type: String },
-      addressLine: { type: String, required: true },
-      city: { type: String, required: true },
-      state: { type: String, required: true },
-      postalCode: { type: String, required: true },
-      country: { type: String, default: 'India' },
+      type: orderAddressSnapshotSchema,
+      default: () => ({}),
     },
     billingAddress: {
-      fullName: { type: String },
-      phone: { type: String },
-      addressLine: { type: String },
-      city: { type: String },
-      state: { type: String },
-      postalCode: { type: String },
-      country: { type: String, default: 'India' },
+      type: orderAddressSnapshotSchema,
+      default: () => ({}),
     },
-    items: [orderItemSchema],
 
-    // Primary High-level Order State
+    // Immutable item price snapshots
+    items: [orderItemSnapshotSchema],
+
+    // Primary Order Status State Machine
     orderStatus: {
       type: String,
-      enum: [
-        'ACTIVE',
-        'CANCELLED',
-        'COMPLETED',
-        'RTO',
-        'RETURN',
-        'REPLACEMENT',
-        // Backward-compatibility legacy states
-        'PENDING',
-        'PLACED',
-        'CONFIRMED',
-        'PROCESSING',
-        'SHIPPED',
-        'IN_TRANSIT',
-        'OUT_FOR_DELIVERY',
-        'DELIVERED',
-        'PAYMENT_FAILED',
-        'RETURNED',
-      ],
-      default: 'ACTIVE',
+      default: 'PLACED',
       index: true,
     },
 
-    // Granular Physical Fulfillment State
+    // Physical fulfillment status (mirrors logistics)
     fulfillmentStatus: {
       type: String,
-      enum: [
-        'NEW',
-        'CONFIRMED',
-        'PROCESSING',
-        'PACKED',
-        'SHIPMENT_CREATED',
-        'LABEL_GENERATED',
-        'READY_FOR_PICKUP',
-        'PICKED_UP',
-        'IN_TRANSIT',
-        'OUT_FOR_DELIVERY',
-        'DELIVERED',
-        'CANCELLED',
-      ],
       default: 'NEW',
       index: true,
     },
 
     paymentMethod: {
       type: String,
-      enum: ['COD', 'CARD', 'ONLINE', 'RAZORPAY', 'UPI', 'NETBANKING', 'QR', 'WALLET'],
-      default: 'COD',
+      default: 'RAZORPAY',
     },
 
     paymentStatus: {
       type: String,
-      enum: ['PENDING', 'PAID', 'FAILED', 'REFUND_PENDING', 'REFUND_PROCESSING', 'REFUNDED', 'NOT_REQUIRED'],
       default: 'PENDING',
       index: true,
     },
 
-    codCollectionStatus: {
+    collectionStatus: {
       type: String,
-      enum: ['NOT_APPLICABLE', 'PENDING', 'COLLECTED', 'REMITTED', 'FAILED'],
       default: 'NOT_APPLICABLE',
       index: true,
     },
+    codCollectionStatus: { type: String, default: 'NOT_APPLICABLE' }, // compat
     codAmount: { type: Number, default: 0 },
     codCollectedAt: { type: Date },
+    codRemittedAt: { type: Date },
     codCollectionReference: { type: String },
 
-    returnStatus: {
-      type: String,
-      enum: [
-        'NONE',
-        'REQUESTED',
-        'UNDER_REVIEW',
-        'APPROVED',
-        'REJECTED',
-        'PICKUP_SCHEDULED',
-        'PICKED_UP',
-        'IN_TRANSIT',
-        'RECEIVED',
-        'QC_PENDING',
-        'QC_APPROVED',
-        'QC_REJECTED',
-        'COMPLETED',
-      ],
-      default: 'NONE',
-      index: true,
+    // Financial Breakdown Snapshot
+    amountBreakdown: {
+      subtotal: { type: Number, default: 0 },
+      discount: { type: Number, default: 0 },
+      shippingCharge: { type: Number, default: 0 },
+      tax: { type: Number, default: 0 },
+      totalAmount: { type: Number, default: 0 },
+      paidAmount: { type: Number, default: 0 },
+      refundableAmount: { type: Number, default: 0 },
+      refundedAmount: { type: Number, default: 0 },
+      currency: { type: String, default: 'INR' },
     },
 
-    replacementStatus: {
-      type: String,
-      enum: ['NONE', 'REQUESTED', 'APPROVED', 'CREATED', 'SHIPPED', 'DELIVERED', 'COMPLETED'],
-      default: 'NONE',
-      index: true,
-    },
-
-    rtoStatus: {
-      type: String,
-      enum: ['NONE', 'REQUESTED', 'IN_TRANSIT', 'DELIVERED', 'RECEIVED'],
-      default: 'NONE',
-      index: true,
-    },
-
-    refundStatus: {
-      type: String,
-      enum: ['NONE', 'PENDING', 'PROCESSING', 'COMPLETED', 'FAILED'],
-      default: 'NONE',
-      index: true,
-    },
-
-    subtotal: { type: Number, required: true },
+    // Compat financial fields
+    subtotal: { type: Number, default: 0 },
     discount: { type: Number, default: 0 },
     shippingFee: { type: Number, default: 0 },
-    shippingMethod: {
-      type: String,
-      enum: ['STANDARD', 'EXPRESS', 'PRIORITY'],
-      default: 'STANDARD',
-    },
     tax: { type: Number, default: 0 },
-    totalAmount: { type: Number, required: true },
+    totalAmount: { type: Number, default: 0 },
 
-    activeShipment: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: 'Shipment',
-    },
-    shipments: [
-      {
-        type: mongoose.Schema.Types.ObjectId,
-        ref: 'Shipment',
-      },
-    ],
-    returnRequests: [
-      {
-        type: mongoose.Schema.Types.ObjectId,
-        ref: 'ReturnRequest',
-      },
-    ],
-
-    originalOrderId: { type: String },
-    replacementOrderId: { type: String },
-    returnRequestId: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: 'ReturnRequest',
-    },
-
+    // Logistics & Courier Tracking
+    waybill: { type: String, index: true },
     trackingNumber: { type: String, index: true },
     courierPartner: { type: String, default: 'Delhivery Express' },
     estimatedDeliveryDate: { type: Date },
-    estimatedDeliveryDays: { type: String, default: '2-3 Business Days' },
+    deliveredAt: { type: Date },
 
-    // Delhivery B2C Courier Details
     delhivery: {
       waybill: { type: String },
       shipmentId: { type: String },
@@ -239,28 +171,29 @@ const orderSchema = new mongoose.Schema(
       rawResponse: { type: mongoose.Schema.Types.Mixed },
     },
 
-    // Package Details
-    packageDetails: {
-      deadWeight: { type: Number, default: 0.25 }, // in kg
-      volumetricWeight: { type: Number, default: 0.25 },
-      length: { type: Number, default: 15 }, // in cm
-      breadth: { type: Number, default: 10 },
-      height: { type: Number, default: 8 },
-      chargedWeight: { type: Number, default: 0.25 },
-    },
-
-    // Razorpay Online Payment & Refund Details
+    // Razorpay Online Details
     paymentDetails: {
       gateway: { type: String, default: 'Razorpay' },
-      razorpayOrderId: { type: String },
-      razorpayPaymentId: { type: String },
+      razorpayOrderId: { type: String, sparse: true, index: true },
+      razorpayPaymentId: { type: String, sparse: true, index: true },
       razorpaySignature: { type: String },
       transactionId: { type: String },
-      upiId: { type: String },
-      cardLast4: { type: String },
       paidAt: { type: Date },
     },
 
+    // Cancellation tracking
+    cancelledAt: { type: Date },
+    cancelledBy: { type: String },
+    cancellationReason: { type: String },
+
+    // Refund tracking
+    refundStatus: {
+      type: String,
+      default: 'NONE',
+      index: true,
+    },
+    refundInitiatedAt: { type: Date },
+    refundCompletedAt: { type: Date },
     refundDetails: {
       razorpayRefundId: { type: String },
       refundAmount: { type: Number },
@@ -270,8 +203,15 @@ const orderSchema = new mongoose.Schema(
       failureReason: { type: String },
     },
 
-    timeline: [timelineEventSchema],
+    // Restock tracking
+    restockedAt: { type: Date },
+    restockedBy: { type: String },
+    restockStatus: {
+      type: String,
+      default: 'NONE',
+    },
 
+    timeline: [timelineEventSchema],
     trackingHistory: [
       {
         status: { type: String },
@@ -282,43 +222,102 @@ const orderSchema = new mongoose.Schema(
       },
     ],
 
-    addressUpdatedAt: { type: Date },
-    addressEditHistory: [
-      {
-        updatedAt: { type: Date, default: Date.now },
-        updatedBy: { type: String, default: 'Customer' },
-        reason: { type: String, default: 'Customer correction' },
-        previous: {
-          fullName: { type: String },
-          phone: { type: String },
-          addressLine: { type: String },
-          city: { type: String },
-          state: { type: String },
-          postalCode: { type: String },
-        },
-        updated: {
-          fullName: { type: String },
-          phone: { type: String },
-          addressLine: { type: String },
-          city: { type: String },
-          state: { type: String },
-          postalCode: { type: String },
-        },
-      },
-    ],
-
-    invoiceNumber: { type: String },
-    deliveryOtp: { type: String },
-    deliveryRider: {
-      name: { type: String },
-      phone: { type: String },
-    },
+    // Legacy return & replacement links
+    returnStatus: { type: String, default: 'NONE' },
+    replacementStatus: { type: String, default: 'NONE' },
+    rtoStatus: { type: String, default: 'NONE' },
+    activeShipment: { type: mongoose.Schema.Types.ObjectId, ref: 'Shipment' },
+    shipments: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Shipment' }],
+    returnRequests: [{ type: mongoose.Schema.Types.ObjectId, ref: 'ReturnRequest' }],
+    replacements: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Replacement' }],
   },
-  { timestamps: true }
+  {
+    timestamps: true,
+  }
 )
 
-orderSchema.index({ createdAt: -1 })
 orderSchema.index({ user: 1, createdAt: -1 })
-orderSchema.index({ orderNumber: 1, paymentStatus: 1, fulfillmentStatus: 1 })
+orderSchema.index({ orderStatus: 1, createdAt: -1 })
+orderSchema.index({ paymentStatus: 1, createdAt: -1 })
 
-export default mongoose.model('Order', orderSchema)
+// Pre-validate hook to seamlessly auto-populate missing fields on legacy documents
+orderSchema.pre('validate', function (next) {
+  // 1. Sync amountBreakdown
+  if (!this.amountBreakdown) {
+    this.amountBreakdown = {}
+  }
+  const total = Number(this.totalAmount || this.amountBreakdown?.totalAmount || this.subtotal || 0)
+  const sub = Number(this.subtotal || this.amountBreakdown?.subtotal || total)
+  const ship = Number(this.shippingFee || this.amountBreakdown?.shippingCharge || 0)
+
+  if (this.amountBreakdown.totalAmount === undefined || this.amountBreakdown.totalAmount === 0) {
+    this.amountBreakdown.totalAmount = total
+  }
+  if (this.amountBreakdown.subtotal === undefined || this.amountBreakdown.subtotal === 0) {
+    this.amountBreakdown.subtotal = sub
+  }
+  if (this.amountBreakdown.shippingCharge === undefined) {
+    this.amountBreakdown.shippingCharge = ship
+  }
+  if (this.totalAmount === undefined || this.totalAmount === 0) {
+    this.totalAmount = total
+  }
+  if (this.subtotal === undefined || this.subtotal === 0) {
+    this.subtotal = sub
+  }
+
+  // 2. Sync items
+  if (Array.isArray(this.items)) {
+    for (const item of this.items) {
+      if (!item.productName && item.name) item.productName = item.name
+      if (!item.name && item.productName) item.name = item.productName
+      if (!item.qty && item.quantity) item.qty = item.quantity
+      if (!item.quantity && item.qty) item.quantity = item.qty
+      if (item.unitPrice === undefined && item.price !== undefined) item.unitPrice = item.price
+      if (item.price === undefined && item.unitPrice !== undefined) item.price = item.unitPrice
+      if (item.finalPrice === undefined || item.finalPrice === 0) {
+        item.finalPrice = (item.unitPrice || item.price || 0) * (item.qty || item.quantity || 1)
+      }
+    }
+  }
+
+  // 3. Sync timeline
+  if (Array.isArray(this.timeline)) {
+    for (const event of this.timeline) {
+      if (!event.status) {
+        event.status = event.newStatus || event.previousStatus || 'UPDATED'
+      }
+      if (!event.source) {
+        event.source = 'SYSTEM'
+      }
+    }
+  }
+
+  // 4. Sync addresses
+  if (this.shippingAddress) {
+    if (!this.shippingAddress.fullName && this.customerName) {
+      this.shippingAddress.fullName = this.customerName
+    }
+    if (!this.shippingAddress.phone && this.customerPhone) {
+      this.shippingAddress.phone = this.customerPhone
+    }
+  }
+
+  if (this.billingAddress) {
+    if (!this.billingAddress.fullName) {
+      this.billingAddress.fullName = this.shippingAddress?.fullName || this.customerName || 'Customer'
+    }
+    if (!this.billingAddress.phone) {
+      this.billingAddress.phone = this.shippingAddress?.phone || this.customerPhone || '9265259954'
+    }
+  }
+
+  if (this.collectionStatus && this.codCollectionStatus !== this.collectionStatus) {
+    this.codCollectionStatus = this.collectionStatus
+  }
+
+  next()
+})
+
+const Order = mongoose.model('Order', orderSchema)
+export default Order

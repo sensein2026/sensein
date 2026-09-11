@@ -7,8 +7,14 @@ import {
   checkDelhiveryPincode,
   estimateDelhiveryRate,
   cancelDelhiveryShipment,
+  generateDelhiveryWaybill,
   DELHIVERY_CONFIG,
 } from '../utils/delhivery.js'
+import {
+  transitionOrderStatus,
+  isAddressEditAllowed,
+  isPrePickupCancellationAllowed,
+} from '../services/orderStatusEngine.js'
 import { logger } from '../config/logger.js'
 
 /**
@@ -578,4 +584,295 @@ export const updateShippingSettings = async (req, res, next) => {
     next(error)
   }
 }
+
+/**
+ * Helper to get customer-facing status badge
+ */
+function getCustomerBadge(status) {
+  switch (status) {
+    case 'NEW': return { text: 'Order Placed', color: 'bg-blue-100 text-blue-800' }
+    case 'CONFIRMED': return { text: 'Order Confirmed', color: 'bg-indigo-100 text-indigo-800' }
+    case 'PROCESSING': return { text: 'Packaging in Lab', color: 'bg-purple-100 text-purple-800' }
+    case 'PACKED': return { text: 'Packed & Manifested', color: 'bg-amber-100 text-amber-800' }
+    case 'READY_FOR_PICKUP': return { text: 'Manifested with Delhivery', color: 'bg-sky-100 text-sky-800' }
+    case 'PICKED_UP': return { text: 'Picked Up by Delhivery', color: 'bg-blue-100 text-blue-800' }
+    case 'IN_TRANSIT': return { text: 'In Transit', color: 'bg-cyan-100 text-cyan-800' }
+    case 'OUT_FOR_DELIVERY': return { text: 'Out for Delivery Today', color: 'bg-orange-100 text-orange-800 animate-pulse' }
+    case 'DELIVERED': return { text: 'Delivered Successfully', color: 'bg-emerald-100 text-emerald-800' }
+    case 'CANCELLED': return { text: 'Cancelled', color: 'bg-red-100 text-red-800' }
+    default: return { text: status, color: 'bg-slate-100 text-slate-800' }
+  }
+}
+
+/**
+ * Helper to get admin notice on courier status
+ */
+function getAdminNotice(status, paymentMethod) {
+  switch (status) {
+    case 'READY_FOR_PICKUP':
+      return 'Delhivery AWB generated. Handover sticker printed. Waiting for rider.'
+    case 'PICKED_UP':
+      return 'Handover complete. Customer address editing & cancel buttons LOCKED.'
+    case 'IN_TRANSIT':
+      return 'Shipment progressing through Delhivery distribution gateways.'
+    case 'OUT_FOR_DELIVERY':
+      return 'Rider dispatched. Expected doorstep handover in 2-4 hours.'
+    case 'DELIVERED':
+      return paymentMethod === 'COD'
+        ? 'Delivered! COD cash collected by Delhivery. Ready for remittance.'
+        : 'Delivered safely to verified customer address.'
+    default:
+      return `Milestone recorded: ${status}`
+  }
+}
+
+/**
+ * 24. Smart Delhivery Lifecycle Simulator
+ * POST /api/shipping/delhivery/simulate
+ */
+export const simulateDelhiveryEvent = async (req, res, next) => {
+  try {
+    const { orderId, event, location, remarks, riderName, riderPhone } = req.body
+    if (!orderId || !event) {
+      return res.status(400).json({ success: false, message: 'Please provide orderId and event' })
+    }
+
+    let order = null
+    if (orderId && !String(orderId).startsWith('sample_')) {
+      order = await Order.findOne({
+        $or: [
+          { _id: String(orderId).match(/^[0-9a-fA-F]{24}$/) ? orderId : null },
+          { orderNumber: orderId },
+          { trackingNumber: orderId },
+          { 'delhivery.waybill': orderId },
+        ],
+      })
+    }
+
+    if (!order) {
+      // Fallback to latest order in DB
+      order = await Order.findOne().sort({ createdAt: -1 })
+    }
+
+    if (!order) {
+      // Create simulated order if DB is empty
+      order = await Order.create({
+        orderNumber: 'ORD-2026-99214',
+        customerName: 'Raj Donga',
+        customerPhone: '9265259954',
+        customerEmail: 'work.rajdonga@gmail.com',
+        shippingAddress: {
+          fullName: 'Raj Donga',
+          phone: '9265259954',
+          addressLine1: '104, Vijay Nagar 2, Puna-Simada Road, Yogi Chowk',
+          city: 'Surat',
+          state: 'Gujarat',
+          pincode: '395010',
+        },
+        items: [
+          {
+            product: '66a123456789abcdef012345',
+            productName: 'Sensein® Matte Finish Clay Wax',
+            qty: 2,
+            unitPrice: 499,
+            finalPrice: 998,
+          },
+        ],
+        amountBreakdown: { subtotal: 998, totalAmount: 998, currency: 'INR' },
+        totalAmount: 998,
+        subtotal: 998,
+        orderStatus: 'CONFIRMED',
+        paymentStatus: 'PENDING',
+        paymentMethod: 'COD',
+      })
+    }
+
+    const awb = order.trackingNumber || order.delhivery?.waybill || generateDelhiveryWaybill()
+    if (!order.trackingNumber) {
+      order.trackingNumber = awb
+      order.courierPartner = 'Delhivery Surface & Express B2C'
+      if (!order.delhivery) order.delhivery = {}
+      order.delhivery.waybill = awb
+      order.delhivery.courierName = 'Delhivery Surface & Express B2C'
+      order.delhivery.trackingUrl = `https://www.delhivery.com/track/package/${awb}`
+      order.delhivery.status = 'SHIPPED'
+    }
+
+    const evt = String(event).toUpperCase().trim()
+    let targetFulfillment = order.fulfillmentStatus || 'NEW'
+    let targetOrderStatus = order.orderStatus || 'ACTIVE'
+    let targetPaymentStatus = order.paymentStatus
+    let targetCodStatus = order.codCollectionStatus
+    let targetRtoStatus = order.rtoStatus
+    let statusDescription = remarks || ''
+    let scanLocation = location || 'Surat Logistics Hub, Gujarat'
+    let courierEventCode = ''
+
+    switch (evt) {
+      case 'MANIFEST':
+      case 'SHIPMENT_CREATED':
+      case 'READY_FOR_PICKUP':
+        targetFulfillment = 'READY_FOR_PICKUP'
+        targetOrderStatus = 'ACTIVE'
+        courierEventCode = 'UD'
+        scanLocation = location || 'Surat Central Logistics Warehouse (MindNext)'
+        statusDescription = remarks || `Shipment manifested. Delhivery AWB #${awb} assigned for pickup.`
+        break
+
+      case 'PICKED_UP':
+      case 'PICKUP':
+        targetFulfillment = 'PICKED_UP'
+        targetOrderStatus = 'SHIPPED'
+        courierEventCode = 'PU'
+        scanLocation = location || 'Surat Central Logistics Warehouse, Gujarat'
+        statusDescription = remarks || `Courier Partner (Delhivery Express) physically collected parcel from warehouse.`
+        break
+
+      case 'IN_TRANSIT':
+      case 'TRANSIT':
+        targetFulfillment = 'IN_TRANSIT'
+        targetOrderStatus = 'IN_TRANSIT'
+        courierEventCode = 'IT'
+        scanLocation = location || 'Ahmedabad Mega Gateway Hub, Gujarat'
+        statusDescription = remarks || `Parcel scanned and processed at intermediate hub. En route to destination center.`
+        break
+
+      case 'OUT_FOR_DELIVERY':
+      case 'OFD':
+        targetFulfillment = 'OUT_FOR_DELIVERY'
+        targetOrderStatus = 'OUT_FOR_DELIVERY'
+        courierEventCode = 'OO'
+        scanLocation = location || 'Destination Delivery Center Hub'
+        statusDescription = remarks || `Parcel is out for delivery with rider ${riderName || 'Ramesh Patel'} (${riderPhone || '+91 9876543210'}).`
+        break
+
+      case 'NDR':
+      case 'FAILED_ATTEMPT':
+        targetFulfillment = 'IN_TRANSIT'
+        targetOrderStatus = 'IN_TRANSIT'
+        courierEventCode = 'NDR'
+        scanLocation = location || 'Local Delivery Center Hub'
+        statusDescription = remarks || `Delivery attempt failed: Customer unavailable / Door closed. Next delivery attempt scheduled for tomorrow.`
+        break
+
+      case 'DELIVERED':
+        targetFulfillment = 'DELIVERED'
+        targetOrderStatus = 'DELIVERED'
+        courierEventCode = 'DL'
+        scanLocation = location || `${order.shippingAddress?.city || 'Destination'}, ${order.shippingAddress?.state || 'India'}`
+        statusDescription = remarks || `Package delivered safely to ${order.shippingAddress?.fullName || 'Customer'}. Handover verified.`
+        if (order.paymentMethod === 'COD') {
+          targetCodStatus = 'COLLECTED'
+          targetPaymentStatus = 'PAID'
+          order.codCollectedAt = new Date()
+          order.codAmount = order.totalAmount
+        }
+        break
+
+      case 'RTO':
+      case 'RETURN_TO_ORIGIN':
+        targetOrderStatus = 'RTO'
+        targetRtoStatus = 'IN_TRANSIT'
+        targetFulfillment = 'IN_TRANSIT'
+        courierEventCode = 'RT'
+        scanLocation = location || 'Return Sorting Facility'
+        statusDescription = remarks || `Customer refused delivery / Repeated NDR failure. Package returning to Surat warehouse.`
+        break
+
+      default:
+        targetFulfillment = evt
+        courierEventCode = 'SCAN'
+        statusDescription = remarks || `Courier milestone update: ${evt}`
+    }
+
+    // Build raw simulated Delhivery Webhook / API payload
+    const simulatedDelhiveryPayload = {
+      Shipment: {
+        AWB: awb,
+        Status: {
+          Status: targetFulfillment,
+          StatusCode: courierEventCode,
+          StatusType: courierEventCode === 'DL' ? 'DEL' : courierEventCode === 'RT' ? 'RTO' : 'UD',
+          StatusDateTime: new Date().toISOString(),
+          StatusLocation: scanLocation,
+          Instructions: statusDescription,
+        },
+        Scans: [
+          {
+            ScanDetail: {
+              ScanDateTime: new Date().toISOString(),
+              ScanType: courierEventCode,
+              Scan: statusDescription,
+              ScannedLocation: scanLocation,
+              Comment: `Simulated via Delhivery Smart Logistics Simulator`,
+            },
+          },
+        ],
+        PickUpDate: targetFulfillment !== 'READY_FOR_PICKUP' ? new Date().toISOString() : null,
+        DeliveryDate: targetFulfillment === 'DELIVERED' ? new Date().toISOString() : null,
+        SenderName: 'MindNext / Sensein Botanical Luxury',
+        ReceiverName: order.shippingAddress?.fullName || order.customerName,
+        Destination: order.shippingAddress?.city || 'Surat',
+        CODAmount: order.paymentMethod === 'COD' ? order.totalAmount : 0,
+        CollectedAmount: targetCodStatus === 'COLLECTED' ? order.totalAmount : 0,
+      },
+      EventSource: 'DELHIVERY_B2C_MCP_WEBHOOK_V2',
+      Timestamp: new Date().toISOString(),
+      SimulatorMode: true,
+    }
+
+    // Apply state transition engine
+    await transitionOrderStatus(
+      order,
+      {
+        orderStatus: targetOrderStatus,
+        fulfillmentStatus: targetFulfillment,
+        paymentStatus: targetPaymentStatus,
+        codCollectionStatus: targetCodStatus,
+        rtoStatus: targetRtoStatus,
+        trackingNumber: awb,
+        courierPartner: 'Delhivery Surface & Express B2C',
+      },
+      {
+        actor: req.user?.email || 'Admin Courier Simulator',
+        actorType: 'ADMIN',
+        reason: statusDescription,
+        source: 'DELHIVERY_SIMULATOR',
+        externalEventId: `SIM-${awb}-${evt}-${Date.now()}`,
+        metadata: {
+          location: scanLocation,
+          delhiveryEvent: evt,
+          courierCode: courierEventCode,
+        },
+      }
+    )
+
+    // Calculate admin and customer impact flags
+    const addressEditAllowed = isAddressEditAllowed(order)
+    const cancelAllowed = isPrePickupCancellationAllowed(order)
+
+    res.json({
+      success: true,
+      message: `Courier event '${evt}' applied successfully!`,
+      data: {
+        order,
+        delhiveryPayload: simulatedDelhiveryPayload,
+        impact: {
+          orderNumber: order.orderNumber,
+          fulfillmentStatus: order.fulfillmentStatus,
+          orderStatus: order.orderStatus,
+          paymentStatus: order.paymentStatus,
+          codCollectionStatus: order.codCollectionStatus,
+          isAddressEditAllowed: addressEditAllowed,
+          isPrePickupCancellationAllowed: cancelAllowed,
+          customerStatusBadge: getCustomerBadge(order.fulfillmentStatus),
+          adminNotice: getAdminNotice(order.fulfillmentStatus, order.paymentMethod),
+        },
+      },
+    })
+  } catch (error) {
+    next(error)
+  }
+}
+
 

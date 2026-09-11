@@ -2,7 +2,6 @@ import SenseinLogo from './SenseinLogo'
 import { NavLink } from 'react-router-dom'
 import {
   LayoutDashboard,
-  TrendingUp,
   Package,
   FolderTree,
   ShoppingBag,
@@ -12,9 +11,9 @@ import {
   Users,
   LayoutTemplate,
   History,
+  TrendingUp,
   ExternalLink,
   FileCheck,
-  Truck,
   X,
 } from 'lucide-react'
 

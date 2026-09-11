@@ -30,6 +30,7 @@ import {
   Sparkles,
   Eye,
   ExternalLink,
+  HelpCircle,
 } from 'lucide-react'
 import {
   useGetMyOrdersQuery,
@@ -47,10 +48,12 @@ import {
   useDeleteSavedAddressMutation,
   useUpdateProfileMutation,
 } from '@/features/authApi'
-import { selectIsAuthenticated, selectCurrentUser } from '@/store/authSlice'
+import { selectIsAuthenticated, selectCurrentUser, setCredentials } from '@/store/authSlice'
 import { openAuthModal } from '@/store/uiSlice'
 import { DelhiveryTaxInvoice } from '@/components/PrintableDocuments'
 import FlipkartOrderTimeline from '@/components/FlipkartOrderTimeline'
+import ConfirmModal from '@/components/ConfirmModal'
+import CancelOrderModal from '@/components/CancelOrderModal'
 
 export default function AccountPage() {
   const navigate = useNavigate()
@@ -81,6 +84,17 @@ export default function AccountPage() {
   const [editName, setEditName] = useState(displayName)
   const [isEditingName, setIsEditingName] = useState(false)
   const [saveSuccessMsg, setSaveSuccessMsg] = useState('')
+
+  const [toast, setToast] = useState(null)
+  const showToast = (message, type = 'success') => {
+    setToast({ message, type })
+    setTimeout(() => {
+      setToast((curr) => (curr?.message === message ? null : curr))
+    }, 4500)
+  }
+
+  const [cancelModalOrder, setCancelModalOrder] = useState(null)
+  const [deleteAddrModal, setDeleteAddrModal] = useState(null)
 
   const [unavailableModal, setUnavailableModal] = useState(null)
   const [selectedOrderModal, setSelectedOrderModal] = useState(null)
@@ -138,30 +152,27 @@ export default function AccountPage() {
         customerComment: order.customerComment || '',
         evidenceMedia: [],
         items: order.items || [],
-        timeline: [],
       },
     })
   }
 
   const handleOpenReturnModal = (order) => {
-    const initialItems = {}
-    ;(order.items || []).forEach((it) => {
-      const pId = it.product?._id || it.product || it._id
-      initialItems[pId] = {
-        product: it.product?._id || it.product || it._id,
-        name: it.name,
-        price: it.price,
-        image: it.image,
-        sku: it.sku,
-        quantity: it.quantity || 1,
+    const initialSelected = {}
+    ;(order.items || []).forEach((item) => {
+      const pId = item.product?._id || item.product || item._id
+      initialSelected[pId] = {
         selected: true,
-        reason: 'Damaged Product',
-        customerComment: '',
-        customReason: '',
+        product: item.product,
+        name: item.name,
+        price: item.price,
+        quantity: item.quantity || 1,
+        maxQuantity: item.quantity || 1,
+        image: item.image,
       }
     })
+
     setReturnForm({
-      selectedItems: initialItems,
+      selectedItems: initialSelected,
       requestType: 'RETURN_REPLACEMENT',
       evidenceMedia: [],
       generalComment: '',
@@ -177,7 +188,7 @@ export default function AccountPage() {
 
     files.forEach((file) => {
       if (file.size > 25 * 1024 * 1024) {
-        alert(`File ${file.name} is too large. Max size is 25MB.`)
+        showToast(`File ${file.name} is too large. Max size is 25MB.`, 'error')
         return
       }
       const reader = new FileReader()
@@ -212,7 +223,7 @@ export default function AccountPage() {
 
     const itemsToReturn = Object.values(returnForm.selectedItems).filter((it) => it.selected)
     if (itemsToReturn.length === 0) {
-      alert('Please select at least one item for replacement / return.')
+      showToast('Please select at least one item for replacement / return.', 'error')
       return
     }
 
@@ -227,11 +238,6 @@ export default function AccountPage() {
       customerComment: returnForm.generalComment || it.customerComment,
     }))
 
-    const confirmed = window.confirm(
-      `Are you sure you want to submit this replacement request for Order #${returnModalOrder.orderNumber}?\n\nReason: ${finalReason}\nOur QC team will review your photos/videos and schedule reverse pickup.`
-    )
-    if (!confirmed) return
-
     try {
       const res = await createReturnRequest({
         orderId: returnModalOrder._id,
@@ -241,11 +247,11 @@ export default function AccountPage() {
         customerComment: `${finalReason}: ${returnForm.generalComment || ''}`.trim(),
       }).unwrap()
 
-      alert(res?.message || 'Replacement request submitted successfully! We will arrange reverse pickup.')
+      showToast(res?.message || 'Replacement request submitted successfully! We will arrange reverse pickup.', 'success')
       setReturnModalOrder(null)
       refetchOrders()
     } catch (err) {
-      alert(err?.data?.message || 'Failed to submit replacement request. Please contact support.')
+      showToast(err?.data?.message || 'Failed to submit replacement request. Please contact support.', 'error')
     }
   }
 
@@ -260,7 +266,7 @@ export default function AccountPage() {
       !orderAddressForm.city.trim() ||
       !orderAddressForm.state.trim()
     ) {
-      alert('કૃપા કરીને બધા ડિલિવરી એડ્રેસ ફિલ્ડ ભરો.')
+      showToast('કૃપા કરીને બધા ડિલિવરી એડ્રેસ ફિલ્ડ ભરો.', 'error')
       return
     }
 
@@ -270,7 +276,7 @@ export default function AccountPage() {
         ...orderAddressForm,
       }).unwrap()
 
-      alert(res?.message || 'ડિલિવરી એડ્રેસ સફળતાપૂર્વક અપડેટ થઈ ગયું છે!')
+      showToast(res?.message || 'ડિલિવરી એડ્રેસ સફળતાપૂર્વક અપડેટ થઈ ગયું છે!', 'success')
 
       if (selectedOrderModal && selectedOrderModal._id === editingOrderAddress._id) {
         setSelectedOrderModal((prev) => ({
@@ -291,7 +297,7 @@ export default function AccountPage() {
       setEditingOrderAddress(null)
       refetchOrders()
     } catch (err) {
-      alert(err?.data?.message || 'Failed to update delivery address')
+      showToast(err?.data?.message || 'Failed to update delivery address', 'error')
     }
   }
 
@@ -314,14 +320,16 @@ export default function AccountPage() {
         setIsEditingName(false)
         setSaveSuccessMsg('Name updated successfully!')
         setTimeout(() => setSaveSuccessMsg(''), 3000)
+        showToast('Name updated successfully!', 'success')
       }
     } catch (err) {
-      alert(err?.data?.message || 'Failed to update name')
+      showToast(err?.data?.message || 'Failed to update name', 'error')
     }
   }
 
   const { data: ordersResponse, isLoading, refetch: refetchOrders } = useGetMyOrdersQuery(undefined, {
     skip: !isAuthenticated,
+    pollingInterval: 5000,
   })
   const orders = ordersResponse?.data || []
   const [cancelUserOrder, { isLoading: isCancellingOrder }] = useCancelUserOrderMutation()
@@ -331,45 +339,12 @@ export default function AccountPage() {
   const [printingOrder, setPrintingOrder] = useState(null)
   const [isGeneratingPdf, setIsGeneratingPdf] = useState(false)
 
-  const handleDownloadInvoice = async (orderToPrint) => {
-    if (!orderToPrint || isGeneratingPdf) return
+  const handleDownloadInvoice = async (order) => {
+    setPrintingOrder(order)
     setIsGeneratingPdf(true)
-    setPrintingOrder(orderToPrint)
-
-    // Wait for the invoice component to render completely
-    await new Promise((resolve) => setTimeout(resolve, 500))
-
-    const element = document.getElementById('sensein-invoice-print-area')
-    if (!element) {
-      window.print()
-      setIsGeneratingPdf(false)
-      setPrintingOrder(null)
-      return
-    }
-
-    const orderNum = orderToPrint.orderNumber || 'ORD'
-
     try {
-      const html2pdf = (await import('html2pdf.js')).default
-      const opt = {
-        margin: [6, 6, 6, 6],
-        filename: `Sensein_Tax_Invoice_${orderNum}.pdf`,
-        image: { type: 'jpeg', quality: 0.98 },
-        html2canvas: {
-          scale: 2,
-          useCORS: true,
-          logging: false,
-          backgroundColor: '#ffffff',
-          scrollY: 0,
-          scrollX: 0,
-        },
-        jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
-        pagebreak: { mode: ['avoid-all', 'css', 'legacy'] },
-      }
-
-      await html2pdf().set(opt).from(element).save()
-    } catch (err) {
-      console.error('PDF generation failed, falling back to print dialog:', err)
+      await new Promise((resolve) => setTimeout(resolve, 350))
+      const orderNum = order.orderNumber || 'Invoice'
       const prevTitle = document.title
       document.title = `Sensein_Tax_Invoice_${orderNum}`
       window.print()
@@ -380,26 +355,17 @@ export default function AccountPage() {
     }
   }
 
-  const handleCancelOrder = async (orderId, orderNum) => {
-    const reason = window.prompt(
-      `Are you sure you want to cancel Order #${orderNum}?\nPlease enter a reason for cancellation:`,
-      'Ordered by mistake / Need to modify items'
-    )
-    if (reason === null) return
-    if (!reason.trim()) {
-      alert('Please enter a cancellation reason.')
-      return
-    }
-
+  const handleConfirmCancelOrder = async (orderId, orderNum, reason) => {
     try {
-      const res = await cancelUserOrder({ id: orderId, reason: reason.trim() }).unwrap()
-      alert(res?.message || 'Order has been cancelled successfully.')
+      const res = await cancelUserOrder({ id: orderId, reason }).unwrap()
+      showToast(res?.message || `Order #${orderNum} cancelled successfully.`, 'success')
       if (selectedOrderModal && (selectedOrderModal._id === orderId || selectedOrderModal.orderNumber === orderNum)) {
-        setSelectedOrderModal((prev) => (prev ? { ...prev, orderStatus: 'CANCELLED' } : null))
+        setSelectedOrderModal((prev) => (prev ? { ...prev, orderStatus: 'CANCELLED', fulfillmentStatus: 'CANCELLED' } : null))
       }
+      setCancelModalOrder(null)
       refetchOrders()
     } catch (err) {
-      alert(err?.data?.message || 'Failed to cancel order. Please contact support.')
+      throw err
     }
   }
 
@@ -413,35 +379,22 @@ export default function AccountPage() {
   const [addAddress, { isLoading: isAddingAddr }] = useAddSavedAddressMutation()
   const [updateAddress, { isLoading: isUpdatingAddr }] = useUpdateSavedAddressMutation()
   const [deleteAddress, { isLoading: isDeletingAddr }] = useDeleteSavedAddressMutation()
-  const [triggerCheckPincode, { isFetching: isCheckingPincode }] = useLazyCheckPincodeQuery()
 
-  // Address Category Filter State (ALL | HOME | WORK | OTHER)
-  const [addressCategoryFilter, setAddressCategoryFilter] = useState('ALL')
-
-  // PIN Code Verification State
-  const [pincodeStatus, setPincodeStatus] = useState({
-    isChecking: false,
-    valid: null,
-    deliverable: null,
-    message: '',
-    courier: '',
-  })
-
-  // New Address Form State
-  const [showAddForm, setShowAddForm] = useState(false)
   const [editingAddr, setEditingAddr] = useState(null)
-  const [editErrors, setEditErrors] = useState({})
-  const [addErrors, setAddErrors] = useState({})
-  const [newAddr, setNewAddr] = useState({
+  const [showAddForm, setShowAddForm] = useState(false)
+  const [addressForm, setAddressForm] = useState({
     title: 'Home',
-    fullName: user?.name || '',
+    fullName: '',
     phone: '',
     addressLine: '',
     city: '',
-    state: 'Gujarat',
+    state: '',
     postalCode: '',
     isDefault: false,
   })
+  const [addErrors, setAddErrors] = useState({})
+
+  const [checkPincode] = useLazyCheckPincodeQuery()
 
   const handleSetDefaultAddress = async (addr) => {
     try {
@@ -456,13 +409,16 @@ export default function AccountPage() {
         postalCode: addr.postalCode,
         isDefault: true,
       }).unwrap()
+      showToast('Default delivery address updated!', 'success')
     } catch (err) {
-      alert(err?.data?.message || 'Failed to set default address')
+      showToast(err?.data?.message || 'Failed to set default address', 'error')
     }
   }
 
   // Universal Modal Scroll Lock (Locks background body scroll whenever any dialog/modal is open)
   const isAnyModalOpen = Boolean(
+    cancelModalOrder ||
+    deleteAddrModal ||
     unavailableModal ||
     selectedOrderModal ||
     editingOrderAddress ||
@@ -721,16 +677,22 @@ export default function AccountPage() {
     }
   }
 
-  const handleDeleteAddr = async (addrId) => {
-    if (confirm('Are you sure you want to remove this delivery address?')) {
-      try {
-        await deleteAddress(addrId).unwrap()
-        if (editingAddr?.addressId === addrId) {
-          setEditingAddr(null)
-        }
-      } catch (err) {
-        alert(err?.data?.message || 'Failed to delete address')
+  const handleDeleteAddr = (addrId) => {
+    setDeleteAddrModal(addrId)
+  }
+
+  const handleConfirmDeleteAddr = async () => {
+    if (!deleteAddrModal) return
+    try {
+      await deleteAddress(deleteAddrModal).unwrap()
+      if (editingAddr?.addressId === deleteAddrModal) {
+        setEditingAddr(null)
       }
+      showToast('Address removed successfully', 'success')
+    } catch (err) {
+      showToast(err?.data?.message || 'Failed to delete address', 'error')
+    } finally {
+      setDeleteAddrModal(null)
     }
   }
 
@@ -963,7 +925,7 @@ export default function AccountPage() {
               ) && (
                 <button
                   type="button"
-                  onClick={() => handleCancelOrder(selectedOrderModal._id, selectedOrderModal.orderNumber)}
+                  onClick={() => setCancelModalOrder(selectedOrderModal)}
                   disabled={isCancellingOrder}
                   className="flex-1 py-2.5 px-4 bg-rose-50 hover:bg-rose-100 text-rose-700 text-xs font-bold uppercase rounded-xl border border-rose-200 transition-all flex items-center justify-center gap-1.5 cursor-pointer shadow-2xs whitespace-nowrap"
                 >
@@ -2352,7 +2314,7 @@ export default function AccountPage() {
                       ) && (
                         <button
                           type="button"
-                          onClick={() => handleCancelOrder(order._id, order.orderNumber)}
+                          onClick={() => setCancelModalOrder(order)}
                           disabled={isCancellingOrder}
                           className="bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 text-xs font-bold uppercase px-3 py-1.5 rounded-lg transition-all flex items-center justify-center gap-1.5 cursor-pointer shadow-2xs"
                         >
@@ -2670,6 +2632,58 @@ export default function AccountPage() {
         )}
       </div>
     </div>
+
+    {/* Cancel Order Custom Modal */}
+    <CancelOrderModal
+      isOpen={Boolean(cancelModalOrder)}
+      onClose={() => setCancelModalOrder(null)}
+      order={cancelModalOrder}
+      onConfirmCancel={handleConfirmCancelOrder}
+      isLoading={isCancellingOrder}
+    />
+
+    {/* Delete Address Custom Confirmation Modal */}
+    <ConfirmModal
+      isOpen={Boolean(deleteAddrModal)}
+      onClose={() => setDeleteAddrModal(null)}
+      onConfirm={handleConfirmDeleteAddr}
+      title="Delete Address"
+      message="Are you sure you want to remove this delivery address from your address book?"
+      confirmText="Delete Address"
+      variant="danger"
+      isLoading={isDeletingAddr}
+    />
+
+    {/* Floating Toast Notification */}
+    {toast && (
+      <div
+        className={`fixed bottom-5 right-5 max-w-sm p-4 rounded-2xl shadow-2xl border backdrop-blur-md flex items-start gap-3 animate-in fade-in slide-in-from-bottom-5 duration-200 z-[9999999] ${
+          toast.type === 'error'
+            ? 'bg-rose-900/95 text-white border-rose-700 shadow-rose-950/30'
+            : toast.type === 'info'
+            ? 'bg-stone-900/95 text-white border-stone-700 shadow-stone-950/30'
+            : 'bg-[#3A2239]/95 text-white border-[#5A3859] shadow-purple-950/30'
+        }`}
+      >
+        {toast.type === 'error' ? (
+          <AlertTriangle className="h-5 w-5 text-rose-300 shrink-0 mt-0.5" />
+        ) : toast.type === 'info' ? (
+          <HelpCircle className="h-5 w-5 text-blue-300 shrink-0 mt-0.5" />
+        ) : (
+          <CheckCircle2 className="h-5 w-5 text-emerald-300 shrink-0 mt-0.5" />
+        )}
+        <div className="flex-1 text-xs font-semibold leading-relaxed">
+          {toast.message}
+        </div>
+        <button
+          type="button"
+          onClick={() => setToast(null)}
+          className="text-stone-300 hover:text-white p-0.5 rounded cursor-pointer"
+        >
+          <X className="h-4 w-4" />
+        </button>
+      </div>
+    )}
     </>
   )
 }

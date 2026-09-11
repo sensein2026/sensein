@@ -13,7 +13,6 @@ import {
   Percent,
   Sparkles,
   RefreshCw,
-
   X,
   AlertCircle,
   TrendingUp,
@@ -21,9 +20,6 @@ import {
   Coins,
   ArrowUpDown,
   Check,
-  Truck,
-  Save,
-  Zap,
 } from 'lucide-react'
 import {
   useGetCouponsQuery,
@@ -31,8 +27,6 @@ import {
   useUpdateCouponMutation,
   useDeleteCouponMutation,
   useToggleCouponMutation,
-  useGetShippingFeeSettingsQuery,
-  useUpdateShippingFeeSettingsMutation,
 } from '@/features/adminApi'
 import { useToast } from '@/context/ToastContext'
 import ConfirmModal from '@/components/ConfirmModal'
@@ -55,78 +49,6 @@ export default function CouponsPage() {
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [editingCoupon, setEditingCoupon] = useState(null)
   const [copiedCode, setCopiedCode] = useState('')
-
-  // Shipping Fee Settings State & API
-  const {
-    data: shippingSettingsData,
-    isLoading: isLoadingShipping,
-    refetch: refetchShipping,
-  } = useGetShippingFeeSettingsQuery()
-  const [updateShippingFeeSettings, { isLoading: isSavingShipping }] =
-    useUpdateShippingFeeSettingsMutation()
-
-  const [shippingForm, setShippingForm] = useState({
-    standardShippingFee: 0,
-    freeShippingThreshold: 0,
-    isFreeShippingEnabled: true,
-    shippingNote: 'Free standard express shipping nationwide on all orders',
-  })
-
-  useEffect(() => {
-    if (shippingSettingsData?.settings) {
-      setShippingForm({
-        standardShippingFee: shippingSettingsData.settings.standardShippingFee ?? 0,
-        freeShippingThreshold: shippingSettingsData.settings.freeShippingThreshold ?? 0,
-        isFreeShippingEnabled: shippingSettingsData.settings.isFreeShippingEnabled ?? true,
-        shippingNote:
-          shippingSettingsData.settings.shippingNote ||
-          'Free standard express shipping nationwide on all orders',
-      })
-    }
-  }, [shippingSettingsData])
-
-  const handleSaveShippingSettings = async (e) => {
-    e?.preventDefault()
-    try {
-      const res = await updateShippingFeeSettings({
-        standardShippingFee: Math.max(0, Number(shippingForm.standardShippingFee) || 0),
-        freeShippingThreshold: Math.max(0, Number(shippingForm.freeShippingThreshold) || 0),
-        isFreeShippingEnabled: Boolean(shippingForm.isFreeShippingEnabled),
-        shippingNote: shippingForm.shippingNote.trim(),
-      }).unwrap()
-      addToast(res.message || 'Shipping fee & delivery settings updated successfully!', 'success')
-    } catch (err) {
-      addToast(err?.data?.message || 'Failed to update shipping settings', 'error')
-    }
-  }
-
-  const handleApplyPreset = (preset) => {
-    if (preset === 'FREE') {
-      setShippingForm((prev) => ({
-        ...prev,
-        standardShippingFee: 0,
-        freeShippingThreshold: 0,
-        isFreeShippingEnabled: true,
-        shippingNote: 'Free standard express shipping nationwide on all orders',
-      }))
-    } else if (preset === '49_499') {
-      setShippingForm((prev) => ({
-        ...prev,
-        standardShippingFee: 49,
-        freeShippingThreshold: 499,
-        isFreeShippingEnabled: true,
-        shippingNote: 'Standard shipping ₹49 • Free express delivery on orders above ₹499',
-      }))
-    } else if (preset === '79_999') {
-      setShippingForm((prev) => ({
-        ...prev,
-        standardShippingFee: 79,
-        freeShippingThreshold: 999,
-        isFreeShippingEnabled: true,
-        shippingNote: 'Standard shipping ₹79 • Free express delivery on orders above ₹999',
-      }))
-    }
-  }
 
   // Delete Confirm State
   const [deleteConfirm, setDeleteConfirm] = useState({ isOpen: false, id: null, code: '' })
@@ -389,182 +311,6 @@ export default function CouponsPage() {
             <span className="text-2xl font-bold text-slate-900">{stats.fixed}</span>
           </div>
         </div>
-      </div>
-
-      {/* Store Shipping Fee & Free Delivery Policy Management Card */}
-      <div className="bg-gradient-to-r from-blue-50/70 via-indigo-50/40 to-slate-50 border border-blue-200/80 rounded-2xl p-5 sm:p-6 shadow-xs">
-        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 pb-4 border-b border-blue-200/60 mb-5">
-          <div className="flex items-center gap-3">
-            <div className="p-2.5 bg-blue-600 text-white rounded-xl shadow-xs shadow-blue-500/20">
-              <Truck className="h-5 w-5" />
-            </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <h2 className="text-base font-bold text-slate-900">
-                  Store Shipping Fee & Free Delivery Threshold
-                </h2>
-                <span className="text-[10px] font-extrabold px-2.5 py-0.5 rounded-full bg-blue-600 text-white tracking-wider uppercase shadow-xs">
-                  {Number(shippingForm.standardShippingFee) === 0
-                    ? 'Free Shipping on All Orders'
-                    : shippingForm.isFreeShippingEnabled && Number(shippingForm.freeShippingThreshold) > 0
-                      ? `₹${shippingForm.standardShippingFee} (Free > ₹${shippingForm.freeShippingThreshold})`
-                      : `₹${shippingForm.standardShippingFee} Flat Rate`}
-                </span>
-              </div>
-              <p className="text-xs text-slate-500 mt-0.5">
-                Configure standard customer shipping fees and free delivery order thresholds applied during cart checkout.
-              </p>
-            </div>
-          </div>
-
-          {/* Quick Presets */}
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">
-              Quick Presets:
-            </span>
-            <button
-              type="button"
-              onClick={() => handleApplyPreset('FREE')}
-              className="px-2.5 py-1 bg-white hover:bg-emerald-50 text-emerald-700 border border-emerald-300 rounded-lg text-xs font-bold transition-all shadow-2xs hover:shadow-xs cursor-pointer flex items-center gap-1"
-            >
-              <Zap className="h-3 w-3 text-emerald-500" />
-              <span>Always Free (₹0)</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => handleApplyPreset('49_499')}
-              className="px-2.5 py-1 bg-white hover:bg-blue-50 text-blue-700 border border-blue-300 rounded-lg text-xs font-bold transition-all shadow-2xs hover:shadow-xs cursor-pointer flex items-center gap-1"
-            >
-              <span>₹49 (Free &gt; ₹499)</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => handleApplyPreset('79_999')}
-              className="px-2.5 py-1 bg-white hover:bg-purple-50 text-purple-700 border border-purple-300 rounded-lg text-xs font-bold transition-all shadow-2xs hover:shadow-xs cursor-pointer flex items-center gap-1"
-            >
-              <span>₹79 (Free &gt; ₹999)</span>
-            </button>
-          </div>
-        </div>
-
-        {/* Shipping Form Controls */}
-        <form onSubmit={handleSaveShippingSettings} className="space-y-4">
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            {/* Standard Shipping Fee */}
-            <div className="bg-white p-3.5 rounded-xl border border-slate-200/80 shadow-2xs">
-              <label className="block text-xs font-bold text-slate-700 mb-1">
-                Standard Shipping Fee (₹) *
-              </label>
-              <div className="relative">
-                <span className="absolute left-3 top-2 text-xs font-bold text-slate-400">₹</span>
-                <input
-                  type="number"
-                  min="0"
-                  step="1"
-                  required
-                  placeholder="0"
-                  value={shippingForm.standardShippingFee}
-                  onChange={(e) =>
-                    setShippingForm((prev) => ({
-                      ...prev,
-                      standardShippingFee: e.target.value,
-                    }))
-                  }
-                  className="w-full pl-7 pr-3 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs font-bold text-slate-900 focus:outline-none focus:border-blue-500 focus:bg-white transition-all"
-                />
-              </div>
-              <p className="text-[10px] text-slate-400 mt-1 font-medium">
-                Set to 0 to provide 100% Free Shipping on all orders nationwide.
-              </p>
-            </div>
-
-            {/* Free Shipping Minimum Threshold */}
-            <div className="bg-white p-3.5 rounded-xl border border-slate-200/80 shadow-2xs">
-              <label className="block text-xs font-bold text-slate-700 mb-1">
-                Free Shipping Threshold (₹)
-              </label>
-              <div className="relative">
-                <span className="absolute left-3 top-2 text-xs font-bold text-slate-400">₹</span>
-                <input
-                  type="number"
-                  min="0"
-                  step="1"
-                  placeholder="e.g. 499"
-                  value={shippingForm.freeShippingThreshold}
-                  onChange={(e) =>
-                    setShippingForm((prev) => ({
-                      ...prev,
-                      freeShippingThreshold: e.target.value,
-                    }))
-                  }
-                  className="w-full pl-7 pr-3 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs font-bold text-slate-900 focus:outline-none focus:border-blue-500 focus:bg-white transition-all"
-                />
-              </div>
-              <p className="text-[10px] text-slate-400 mt-1 font-medium">
-                Orders with subtotal at or above this amount automatically receive Free Delivery.
-              </p>
-            </div>
-
-            {/* Delivery Policy Note */}
-            <div className="bg-white p-3.5 rounded-xl border border-slate-200/80 shadow-2xs">
-              <label className="block text-xs font-bold text-slate-700 mb-1">
-                Checkout Delivery Policy Note
-              </label>
-              <input
-                type="text"
-                placeholder="e.g. Free express delivery nationwide"
-                value={shippingForm.shippingNote}
-                onChange={(e) =>
-                  setShippingForm((prev) => ({
-                    ...prev,
-                    shippingNote: e.target.value,
-                  }))
-                }
-                className="w-full px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs font-medium text-slate-900 focus:outline-none focus:border-blue-500 focus:bg-white transition-all"
-              />
-              <p className="text-[10px] text-slate-400 mt-1 font-medium">
-                Displayed in the cart &amp; checkout summary box for customer clarity.
-              </p>
-            </div>
-          </div>
-
-          <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-2">
-            <label className="flex items-center gap-2.5 cursor-pointer select-none">
-              <input
-                type="checkbox"
-                checked={shippingForm.isFreeShippingEnabled}
-                onChange={(e) =>
-                  setShippingForm((prev) => ({
-                    ...prev,
-                    isFreeShippingEnabled: e.target.checked,
-                  }))
-                }
-                className="rounded border-slate-300 text-blue-600 focus:ring-blue-500 h-4 w-4"
-              />
-              <span className="text-xs font-semibold text-slate-700">
-                Enable Free Shipping condition (Orders above threshold get ₹0 delivery)
-              </span>
-            </label>
-
-            <button
-              type="submit"
-              disabled={isSavingShipping}
-              className="px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold flex items-center gap-2 shadow-xs hover:shadow-md transition-all cursor-pointer active:scale-95 disabled:opacity-50 shrink-0"
-            >
-              {isSavingShipping ? (
-                <>
-                  <RefreshCw className="h-3.5 w-3.5 animate-spin" />
-                  <span>Updating Shipping Rates...</span>
-                </>
-              ) : (
-                <>
-                  <Save className="h-3.5 w-3.5" />
-                  <span>Save Shipping Settings</span>
-                </>
-              )}
-            </button>
-          </div>
-        </form>
       </div>
 
       {/* Filter & Search Bar */}

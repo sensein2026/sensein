@@ -1,6 +1,7 @@
 import { Router } from 'express'
-import { protect, admin } from '../middleware/auth.js'
+import { protect, adminOnly, superadminOnly } from '../middleware/auth.js'
 import { upload } from '../utils/multerStorage.js'
+import Refund from '../models/Refund.js'
 import {
   getDashboardStats,
   getAllOrders,
@@ -50,18 +51,21 @@ import {
   getAdminInvoiceConfig,
   updateAdminInvoiceConfig,
 } from '../controllers/siteSettings.controller.js'
+import { sendSuccess, sendPaginated } from '../utils/responseEnvelope.js'
 
 const router = Router()
 
-// All routes are protected by JWT and require admin role
-router.use(protect, admin)
+// All admin routes require protect + adminOnly
+router.use(protect, adminOnly)
+
+// Dashboard Stats & Settings
+router.get('/stats', getDashboardStats)
+router.get('/settings', getAdminSiteSettings)
+router.put('/settings', superadminOnly, updateAdminSiteSettings)
 
 // Tax Invoice & Seller Configuration
 router.get('/invoice-config', getAdminInvoiceConfig)
 router.put('/invoice-config', updateAdminInvoiceConfig)
-
-// Dashboard Stats
-router.get('/stats', getDashboardStats)
 
 // Orders Management & Export
 router.get('/orders/export', exportOrdersCsv)
@@ -79,8 +83,29 @@ router.get('/maintenance', getAdminSiteSettings)
 router.put('/maintenance', updateAdminSiteSettings)
 router.get('/orders', getAllOrders)
 router.put('/orders/:id/status', updateOrderStatus)
+router.patch('/orders/:id/status', updateOrderStatus)
 router.post('/orders/:id/shipment', createOrderShipment)
 router.post('/orders/:id/collect-cod', confirmCodCollection)
+
+// Payments & Refunds Ledger
+router.get('/refunds', async (req, res, next) => {
+  try {
+    const { page = 1, limit = 20, search } = req.query
+    const query = {}
+    if (search) {
+      const regex = new RegExp(search.trim(), 'i')
+      query.$or = [{ orderNumber: regex }, { razorpayRefundId: regex }, { razorpayPaymentId: regex }]
+    }
+    const skip = (Number(page) - 1) * Number(limit)
+    const [refunds, total] = await Promise.all([
+      Refund.find(query).sort({ createdAt: -1 }).skip(skip).limit(Number(limit)),
+      Refund.countDocuments(query),
+    ])
+    return sendPaginated(res, 'Refunds retrieved successfully', refunds, page, limit, total)
+  } catch (err) {
+    next(err)
+  }
+})
 
 // Products Management
 router.post('/products', createProduct)
@@ -89,7 +114,7 @@ router.delete('/products/:id', deleteProduct)
 
 // Users Management
 router.get('/users', getAllUsers)
-router.put('/users/:id/role', updateUserRole)
+router.put('/users/:id/role', superadminOnly, updateUserRole)
 
 // Category Management
 router.post('/categories', createCategory)
@@ -123,6 +148,7 @@ router.delete('/media/:id', softDeleteMedia)
 router.post('/media/:id/restore', restoreMedia)
 
 // Activity Logs & Snapshot Recovery Vault
+router.get('/audit-logs', getAuditLogs)
 router.get('/audit/logs', getAuditLogs)
 router.get('/audit/export', exportAuditCsv)
 router.post('/audit/logs/:id/recover', recoverFromAuditLog)

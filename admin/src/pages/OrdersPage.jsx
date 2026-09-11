@@ -136,7 +136,9 @@ function printDocument(elementId) {
 }
 
 export default function OrdersPage() {
-  const { data: ordersData, isLoading, isError, refetch } = useGetAdminOrdersQuery()
+  const { data: ordersData, isLoading, isError, refetch } = useGetAdminOrdersQuery(undefined, {
+    pollingInterval: 5000,
+  })
   const [updateOrderStatus, { isLoading: isUpdating }] = useUpdateOrderStatusMutation()
   const [updateOrderAddress, { isLoading: isUpdatingAddress }] = useUpdateOrderAddressMutation()
   const [createShipping, { isLoading: isShippingSingle }] = useCreateShippingMutation()
@@ -403,10 +405,10 @@ export default function OrdersPage() {
         : []
 
   const filterTabs = [
-    { key: 'NEW', label: 'New', statusMatch: ['PENDING', 'PROCESSING'] },
-    { key: 'READY_PICKUP', label: 'Ready for Pickup', statusMatch: ['CONFIRMED', 'READY_FOR_PICKUP'] },
-    { key: 'MANIFEST', label: 'Pickup & Manifest', statusMatch: ['MANIFEST_GENERATED'] },
-    { key: 'IN_TRANSIT', label: 'In Transit', statusMatch: ['SHIPPED', 'IN_TRANSIT'] },
+    { key: 'NEW', label: 'New', statusMatch: ['PENDING', 'NEW'] },
+    { key: 'READY_PICKUP', label: 'Ready for Pickup', statusMatch: ['CONFIRMED', 'PROCESSING', 'PACKED', 'READY_FOR_PICKUP'] },
+    { key: 'MANIFEST', label: 'Pickup & Manifest', statusMatch: ['MANIFEST_GENERATED', 'SHIPMENT_CREATED', 'READY_FOR_PICKUP', 'LABEL_GENERATED'] },
+    { key: 'IN_TRANSIT', label: 'In Transit', statusMatch: ['PICKED_UP', 'SHIPPED', 'IN_TRANSIT', 'OUT_FOR_DELIVERY'] },
     { key: 'DELIVERED', label: 'Delivered', statusMatch: ['DELIVERED'] },
     { key: 'RTO', label: 'RTO', statusMatch: ['CANCELLED', 'RTO'] },
     { key: 'RETURNS', label: 'Returns & Replacements', statusMatch: [] },
@@ -429,13 +431,14 @@ export default function OrdersPage() {
         o.user?.email?.toLowerCase().includes(term)
 
       const activeTabObj = filterTabs.find((t) => t.key === statusFilter)
-      const st = (o.orderStatus || 'PROCESSING').toUpperCase()
+      const fst = (o.fulfillmentStatus || '').toUpperCase()
+      const ost = (o.orderStatus || '').toUpperCase()
       const matchesStatus =
         !activeTabObj ||
         statusFilter === 'ALL' ||
         statusFilter === 'ADDRESS_EDITED' ||
         statusFilter === 'RETURNS' ||
-        (activeTabObj.statusMatch && activeTabObj.statusMatch.includes(st))
+        (activeTabObj.statusMatch && (activeTabObj.statusMatch.includes(fst) || activeTabObj.statusMatch.includes(ost)))
 
       // Address-Edited tab shows every order that had its delivery address changed
       const matchesAddressEdited =
@@ -590,7 +593,11 @@ export default function OrdersPage() {
     }
     const tab = filterTabs.find((t) => t.key === tabKey)
     if (!tab || !tab.statusMatch || tab.statusMatch.length === 0) return rawOrders.length
-    return rawOrders.filter((o) => tab.statusMatch.includes((o.orderStatus || 'PROCESSING').toUpperCase())).length
+    return rawOrders.filter((o) => {
+      const fst = (o.fulfillmentStatus || '').toUpperCase()
+      const ost = (o.orderStatus || '').toUpperCase()
+      return tab.statusMatch.includes(fst) || tab.statusMatch.includes(ost)
+    }).length
   }
 
   // Toggle select all orders on current page
@@ -1251,54 +1258,111 @@ export default function OrdersPage() {
 
                       {/* 6. Delhivery Logistics Status & Waybill */}
                       <td className="p-3 sm:p-4 align-top min-w-[170px] whitespace-nowrap">
-                        {isShipped ? (
-                          <div className="space-y-1">
-                            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-blue-50 text-blue-700 border border-blue-200">
-                              <span className="w-1.5 h-1.5 rounded-full bg-blue-600 animate-pulse"></span>
-                              <span>In Transit</span>
-                            </span>
-                            <div className="flex items-center gap-1 mt-1">
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  setTrackingModalOrder(order)
-                                  setIsTrackingModalOpen(true)
-                                }}
-                                className="text-[11px] font-mono text-blue-600 hover:text-blue-800 font-bold inline-flex items-center gap-1 hover:underline cursor-pointer"
-                                title="Click to view live Delhivery checkpoint history"
-                              >
-                                <Truck className="h-3 w-3 shrink-0" />
-                                <span>{awb}</span>
-                                <Eye className="h-3 w-3 text-blue-500 shrink-0" />
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  navigator.clipboard.writeText(awb)
-                                  setFeedbackMsg(`Copied Waybill #${awb}`)
-                                  setTimeout(() => setFeedbackMsg(''), 2500)
-                                }}
-                                className="text-slate-400 hover:text-slate-700 p-0.5"
-                                title="Copy Delhivery Waybill"
-                              >
-                                <Copy className="h-3 w-3" />
-                              </button>
+                        {(() => {
+                          const fst = (order.fulfillmentStatus || order.orderStatus || '').toUpperCase()
+                          const ost = (order.orderStatus || '').toUpperCase()
+                          
+                          let badgeEl = null
+                          if (fst === 'DELIVERED' || ost === 'DELIVERED') {
+                            badgeEl = (
+                              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                                <span className="w-1.5 h-1.5 rounded-full bg-emerald-600"></span>
+                                <span>Delivered</span>
+                              </span>
+                            )
+                          } else if (fst === 'OUT_FOR_DELIVERY' || ost === 'OUT_FOR_DELIVERY') {
+                            badgeEl = (
+                              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-amber-50 text-amber-700 border border-amber-200 animate-pulse">
+                                <span className="w-1.5 h-1.5 rounded-full bg-amber-600"></span>
+                                <span>Out for Delivery</span>
+                              </span>
+                            )
+                          } else if (fst === 'IN_TRANSIT' || ost === 'IN_TRANSIT') {
+                            badgeEl = (
+                              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-cyan-50 text-cyan-700 border border-cyan-200">
+                                <span className="w-1.5 h-1.5 rounded-full bg-cyan-600 animate-pulse"></span>
+                                <span>In Transit</span>
+                              </span>
+                            )
+                          } else if (fst === 'PICKED_UP' || ost === 'SHIPPED') {
+                            badgeEl = (
+                              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-blue-50 text-blue-700 border border-blue-200">
+                                <span className="w-1.5 h-1.5 rounded-full bg-blue-600"></span>
+                                <span>Picked Up</span>
+                              </span>
+                            )
+                          } else if (fst === 'READY_FOR_PICKUP' || fst === 'PACKED' || fst === 'SHIPMENT_CREATED') {
+                            badgeEl = (
+                              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-sky-50 text-sky-700 border border-sky-200">
+                                <span className="w-1.5 h-1.5 rounded-full bg-sky-600"></span>
+                                <span>Manifested</span>
+                              </span>
+                            )
+                          } else if (ost === 'CANCELLED' || fst === 'CANCELLED') {
+                            badgeEl = (
+                              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-rose-50 text-rose-700 border border-rose-200">
+                                <span className="w-1.5 h-1.5 rounded-full bg-rose-600"></span>
+                                <span>Cancelled</span>
+                              </span>
+                            )
+                          } else if (isShipped) {
+                            badgeEl = (
+                              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-blue-50 text-blue-700 border border-blue-200">
+                                <span className="w-1.5 h-1.5 rounded-full bg-blue-600"></span>
+                                <span>Shipped</span>
+                              </span>
+                            )
+                          } else {
+                            badgeEl = (
+                              <span className="px-2.5 py-1 rounded-full text-[11px] font-bold bg-amber-50 text-amber-800 border border-amber-200 inline-flex items-center gap-1 shadow-2xs">
+                                <span className="w-1.5 h-1.5 rounded-full bg-amber-500"></span>
+                                <span>Ready to Dispatch</span>
+                              </span>
+                            )
+                          }
+
+                          return (
+                            <div className="space-y-1">
+                              {badgeEl}
+                              {awb ? (
+                                <div className="flex items-center gap-1 mt-1">
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setTrackingModalOrder(order)
+                                      setIsTrackingModalOpen(true)
+                                    }}
+                                    className="text-[11px] font-mono text-blue-600 hover:text-blue-800 font-bold inline-flex items-center gap-1 hover:underline cursor-pointer"
+                                    title="Click to view live Delhivery checkpoint history"
+                                  >
+                                    <Truck className="h-3 w-3 shrink-0" />
+                                    <span>{awb}</span>
+                                    <Eye className="h-3 w-3 text-blue-500 shrink-0" />
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      navigator.clipboard.writeText(awb)
+                                      setFeedbackMsg(`Copied Waybill #${awb}`)
+                                      setTimeout(() => setFeedbackMsg(''), 2500)
+                                    }}
+                                    className="text-slate-400 hover:text-slate-700 p-0.5"
+                                    title="Copy Delhivery Waybill"
+                                  >
+                                    <Copy className="h-3 w-3" />
+                                  </button>
+                                </div>
+                              ) : (
+                                <div className="text-[10px] text-slate-500 mt-0.5">
+                                  Awaiting Waybill
+                                </div>
+                              )}
+                              <div className="text-[10px] text-slate-500 font-medium">
+                                ETA: <strong className="text-slate-700">{order.estimatedDeliveryDays || '2-3 Business Days'}</strong>
+                              </div>
                             </div>
-                            <div className="text-[10px] text-slate-500 font-medium">
-                              ETA: <strong className="text-slate-700">{order.estimatedDeliveryDays || (pin.startsWith('395') ? 'Wed, 9 Sept, 2026' : 'Thu, 10 Sept, 2026')}</strong>
-                            </div>
-                          </div>
-                        ) : (
-                          <div>
-                            <span className="px-2.5 py-1 rounded-full text-[11px] font-bold bg-amber-50 text-amber-800 border border-amber-200 inline-flex items-center gap-1 shadow-2xs">
-                              <span className="w-1.5 h-1.5 rounded-full bg-amber-500"></span>
-                              <span>Ready to Dispatch</span>
-                            </span>
-                            <div className="text-[10px] text-slate-500 mt-1">
-                              Awaiting Delhivery Waybill
-                            </div>
-                          </div>
-                        )}
+                          )
+                        })()}
                       </td>
 
                       {/* 7. Actions */}

@@ -22,6 +22,36 @@ const siteSettingsSchema = new mongoose.Schema(
       type: Boolean,
       default: true,
     },
+
+    // Replacement Policy & Logistics Controls
+    replacementWindowDays: {
+      type: Number,
+      default: 7,
+      min: 1,
+      max: 30,
+    },
+    replacementDispatchMode: {
+      type: String,
+      enum: ['after_pickup', 'parallel'],
+      default: 'after_pickup',
+    },
+    autoConfirmOrders: {
+      type: Boolean,
+      default: true,
+    },
+
+    // Warehouse & Pickup Address
+    warehouse: {
+      name: { type: String, default: 'Sensein Primary Fulfillment Center' },
+      phone: { type: String, default: '+91 7984919956' },
+      addressLine1: { type: String, default: '104, Vijay Nagar 2, Yogi Chowk, Puna-Simada Road' },
+      addressLine2: { type: String, default: '' },
+      city: { type: String, default: 'Surat' },
+      state: { type: String, default: 'Gujarat' },
+      pincode: { type: String, default: '395010' },
+      country: { type: String, default: 'India' },
+    },
+
     sellerDetails: {
       companyName: {
         type: String,

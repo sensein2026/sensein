@@ -11,7 +11,10 @@ export const ordersApi = api.injectEndpoints({
       invalidatesTags: ['Order', 'Cart', 'Address', 'User'],
     }),
     getMyOrders: builder.query({
-      query: () => '/orders/my-orders',
+      query: (params) => {
+        const queryStr = params ? `?${new URLSearchParams(params).toString()}` : ''
+        return `/orders/my-orders${queryStr}`
+      },
       providesTags: ['Order'],
     }),
     getOrderById: builder.query({
@@ -31,7 +34,7 @@ export const ordersApi = api.injectEndpoints({
     }),
     createPaymentOrder: builder.mutation({
       query: (data) => ({
-        url: '/payment/create',
+        url: '/payment/create-order',
         method: 'POST',
         body: data,
       }),
@@ -62,7 +65,7 @@ export const ordersApi = api.injectEndpoints({
     }),
     createRazorpayOrder: builder.mutation({
       query: (data) => ({
-        url: '/payment/create',
+        url: '/payment/create-order',
         method: 'POST',
         body: data,
       }),
@@ -78,7 +81,7 @@ export const ordersApi = api.injectEndpoints({
     updateOrderStatus: builder.mutation({
       query: ({ id, orderStatus, paymentStatus, courierPartner, trackingNumber, newCheckpoint }) => ({
         url: `/orders/${id}/status`,
-        method: 'PUT',
+        method: 'PATCH',
         body: { orderStatus, paymentStatus, courierPartner, trackingNumber, newCheckpoint },
       }),
       invalidatesTags: (result, error, { id }) => [{ type: 'Order', id }, 'Order'],
@@ -107,20 +110,52 @@ export const ordersApi = api.injectEndpoints({
       query: () => '/shipping/settings',
       providesTags: ['ShippingSettings'],
     }),
+
+    // Replacements API
+    createReplacementRequest: builder.mutation({
+      query: (replacementData) => ({
+        url: '/replacements',
+        method: 'POST',
+        body: replacementData,
+      }),
+      invalidatesTags: ['Order', 'Replacement', 'Return'],
+    }),
+    getMyReplacements: builder.query({
+      query: () => '/replacements',
+      providesTags: ['Replacement'],
+    }),
+    getReplacementById: builder.query({
+      query: (id) => `/replacements/${id}`,
+      providesTags: (result, error, id) => [{ type: 'Replacement', id }],
+    }),
+    getReplacementTracking: builder.query({
+      query: (id) => `/replacements/${id}/track`,
+      providesTags: (result, error, id) => [{ type: 'Replacement', id }],
+    }),
+    cancelReplacement: builder.mutation({
+      query: ({ id, reason }) => ({
+        url: `/replacements/${id}/cancel`,
+        method: 'PATCH',
+        body: { reason },
+      }),
+      invalidatesTags: ['Replacement', 'Order'],
+    }),
+
+    // Legacy Aliases
     createReturnRequest: builder.mutation({
       query: (returnData) => ({
-        url: '/returns',
+        url: '/replacements',
         method: 'POST',
         body: returnData,
       }),
-      invalidatesTags: ['Order', 'Return'],
+      invalidatesTags: ['Order', 'Return', 'Replacement'],
     }),
     getMyReturns: builder.query({
-      query: () => '/returns',
-      providesTags: ['Return'],
+      query: () => '/replacements',
+      providesTags: ['Return', 'Replacement'],
     }),
     getReturnById: builder.query({
-      query: (id) => `/returns/${id}`,
+      query: (id) => `/replacements/${id}`,
       providesTags: (result, error, id) => [{ type: 'Return', id }],
     }),
   }),
@@ -146,6 +181,11 @@ export const {
   useUpdateOrderAddressMutation,
   useGetPublicInvoiceConfigQuery,
   useGetShippingSettingsQuery,
+  useCreateReplacementRequestMutation,
+  useGetMyReplacementsQuery,
+  useGetReplacementByIdQuery,
+  useGetReplacementTrackingQuery,
+  useCancelReplacementMutation,
   useCreateReturnRequestMutation,
   useGetMyReturnsQuery,
   useGetReturnByIdQuery,

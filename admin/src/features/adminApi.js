@@ -461,6 +461,15 @@ export const adminApi = api.injectEndpoints({
       }),
       invalidatesTags: ['ShippingConfig', 'ShippingSettings', 'Order'],
     }),
+    // Delhivery Smart Lifecycle Simulator
+    simulateDelhiveryEvent: builder.mutation({
+      query: (body) => ({
+        url: '/shipping/delhivery/simulate',
+        method: 'POST',
+        body,
+      }),
+      invalidatesTags: ['Order', 'Stats', 'AuditLog'],
+    }),
   }),
 })
 
@@ -532,5 +541,6 @@ export const {
   useToggleCouponMutation,
   useGetShippingFeeSettingsQuery,
   useUpdateShippingFeeSettingsMutation,
+  useSimulateDelhiveryEventMutation,
 } = adminApi
 

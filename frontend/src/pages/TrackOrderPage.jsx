@@ -58,6 +58,19 @@ export default function TrackOrderPage() {
     }
   }, [initialQuery, triggerTrack])
 
+  // 5-Second live background polling for real-time tracking updates
+  useEffect(() => {
+    if (!hasSearched || !queryInput) return
+    const pollInterval = setInterval(() => {
+      const clean = queryInput.trim()
+      if (clean) {
+        triggerTrack(clean)
+      }
+    }, 5000)
+
+    return () => clearInterval(pollInterval)
+  }, [hasSearched, queryInput, triggerTrack])
+
   const handleSearch = (e) => {
     if (e) e.preventDefault()
     const clean = queryInput.trim()
@@ -104,9 +117,13 @@ export default function TrackOrderPage() {
     })
   }
 
+  const [addressToast, setAddressToast] = useState(null)
+  const [addressError, setAddressError] = useState('')
+
   const handleSaveAddress = async (e) => {
     e.preventDefault()
     if (!editingOrder) return
+    setAddressError('')
 
     if (
       !addressForm.customerName.trim() ||
@@ -116,7 +133,7 @@ export default function TrackOrderPage() {
       !addressForm.city.trim() ||
       !addressForm.state.trim()
     ) {
-      alert('કૃપા કરીને બધા ડિલિવરી એડ્રેસ ફિલ્ડ ભરો.')
+      setAddressError('કૃપા કરીને બધા ડિલિવરી એડ્રેસ ફિલ્ડ ભરો.')
       return
     }
 
@@ -126,11 +143,12 @@ export default function TrackOrderPage() {
         ...addressForm,
       }).unwrap()
 
-      alert(res?.message || 'ડિલિવરી એડ્રેસ સફળતાપૂર્વક અપડેટ થઈ ગયું છે!')
+      setAddressToast({ type: 'success', message: res?.message || 'ડિલિવરી એડ્રેસ સફળતાપૂર્વક અપડેટ થઈ ગયું છે!' })
+      setTimeout(() => setAddressToast(null), 4000)
       setEditingOrder(null)
       triggerTrack(queryInput || editingOrder.orderNumber)
     } catch (err) {
-      alert(err?.data?.message || 'Failed to update delivery address. Please try again.')
+      setAddressError(err?.data?.message || 'Failed to update delivery address. Please try again.')
     }
   }
 
@@ -754,6 +772,13 @@ export default function TrackOrderPage() {
                   </div>
                 </div>
 
+                {addressError && (
+                  <div className="p-3 bg-rose-50 border border-rose-200 text-rose-700 text-xs rounded-xl flex items-center gap-2">
+                    <AlertTriangle className="h-4 w-4 shrink-0" />
+                    <span>{addressError}</span>
+                  </div>
+                )}
+
                 <div className="pt-3 border-t border-stone-100 flex items-center justify-end gap-2.5">
                   <button
                     type="button"
@@ -773,6 +798,14 @@ export default function TrackOrderPage() {
                 </div>
               </form>
             </div>
+          </div>
+        )}
+
+        {/* Floating Toast */}
+        {addressToast && (
+          <div className="fixed bottom-5 right-5 z-50 p-4 rounded-2xl shadow-2xl bg-emerald-900/95 text-white border border-emerald-700 backdrop-blur-md flex items-center gap-3 animate-in fade-in slide-in-from-bottom-5">
+            <CheckCircle2 className="h-5 w-5 text-emerald-300 shrink-0" />
+            <span className="text-xs font-semibold">{addressToast.message}</span>
           </div>
         )}
       </div>
