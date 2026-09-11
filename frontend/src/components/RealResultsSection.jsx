@@ -5,7 +5,7 @@ import { ChevronLeft, ChevronRight, Sparkles, ShoppingBag, Star, Volume2, Volume
 const defaultVideoCards = [
   {
     id: 1,
-    category: 'Hair Repair Shampoo',
+    category: 'Hair Shampoo',
     title: 'Color Pro Combo',
     subtitle: 'Repair & protection for color-treated hair',
     productName: 'SENSEIN® Damage Repair Shampoo',
@@ -18,7 +18,7 @@ const defaultVideoCards = [
   },
   {
     id: 2,
-    category: 'Hair Serum & Gloss',
+    category: 'Hair Serum',
     title: 'Argan Combo',
     subtitle: 'Smoothness, shine & frizz control',
     productName: 'SENSEIN® Anti-Frizz Gloss Serum',
@@ -31,7 +31,7 @@ const defaultVideoCards = [
   },
   {
     id: 3,
-    category: 'Deep Conditioning Mask',
+    category: 'Hair Mask',
     title: 'Hydro-Repair Mask',
     subtitle: 'Deep hydration & cuticle seal',
     productName: 'SENSEIN® Intense Repair Mask',
@@ -44,7 +44,7 @@ const defaultVideoCards = [
   },
   {
     id: 4,
-    category: 'Scalp Detox & Shield',
+    category: 'Scalp Serum',
     title: 'Scalp SOS & Detox',
     subtitle: 'Hard water mineral shield & scalp clarity',
     productName: 'SENSEIN® Scalp Shield Serum',
@@ -57,7 +57,7 @@ const defaultVideoCards = [
   },
   {
     id: 5,
-    category: 'Luxury Hair Fragrance',
+    category: 'Hair Perfume',
     title: 'Royal Amber Mist',
     subtitle: 'Luxury alcohol-free hair mist & glass shine',
     productName: 'SENSEIN® Royal Amber Hair Perfume',
@@ -69,6 +69,35 @@ const defaultVideoCards = [
     tag: 'LUXURY ESSENCE',
   },
 ]
+
+// Intelligent helper to resolve the exact product category
+function resolveCategory(card) {
+  if (!card) return 'LUXURY HAIRCARE'
+  
+  // 1. If explicit category is provided and distinct from title
+  if (
+    card.category &&
+    card.category.trim() &&
+    card.category.trim().toLowerCase() !== (card.title || '').trim().toLowerCase()
+  ) {
+    return card.category.trim()
+  }
+
+  // 2. Intelligent category matching from product name, title, or link
+  const text = `${card.productName || ''} ${card.title || ''} ${card.productLink || ''} ${card.subtitle || ''} ${card.category || ''}`.toLowerCase()
+
+  if (text.includes('shampoo')) return 'HAIR SHAMPOO'
+  if (text.includes('serum') && text.includes('scalp')) return 'SCALP SERUM'
+  if (text.includes('serum')) return 'HAIR SERUM'
+  if (text.includes('mask') || text.includes('hydro-repair') || text.includes('bond repair')) return 'HAIR MASK'
+  if (text.includes('perfume') || text.includes('mist')) return 'HAIR PERFUME'
+  if (text.includes('conditioner')) return 'CONDITIONER'
+  if (text.includes('oil') || text.includes('elixir')) return 'HAIR OIL'
+  if (text.includes('clay') || text.includes('wax')) return 'STYLING WAX'
+  if (text.includes('scalp') || text.includes('detox')) return 'SCALP CARE'
+
+  return card.category?.trim() || card.tag || 'HAIRCARE'
+}
 
 export default function RealResultsSection({ config }) {
   const videoCards =
@@ -288,7 +317,7 @@ export default function RealResultsSection({ config }) {
     setTouchStartX(null)
   }
 
-  // 5-Card Symmetrical Progressive Tilted Fan Spread (2 Left + 1 Center + 2 Right - No Edge Clipping)
+  // 5-Card Symmetrical Progressive Tilted Fan Spread (2 Left + 1 Center + 2 Right - Zero Edge Clipping)
   const getCardStyle = (idx) => {
     const diff = (idx - activeIndex + videoCards.length) % videoCards.length
 
@@ -299,14 +328,14 @@ export default function RealResultsSection({ config }) {
 
     if (diff === 0) {
       // 1. Center Upright Card (Focus)
-      transform = 'translate3d(0px, 0px, 0px) rotate(0deg) scale(1.04)'
+      transform = 'translate3d(0px, 0px, 0px) rotate(0deg) scale(1.03)'
       zIndex = 30
       opacity = 1
       filter = 'brightness(100%)'
     } else if (diff === 1) {
       // 2. Inner Right Tilted Card
-      const tx = isMobile ? 36 : 120
-      const ty = isMobile ? 5 : 14
+      const tx = isMobile ? 42 : 130
+      const ty = isMobile ? 6 : 16
       const rot = isMobile ? 5 : 7.5
       transform = `translate3d(${tx}px, ${ty}px, -20px) rotate(${rot}deg) scale(0.9)`
       zIndex = 20
@@ -314,17 +343,17 @@ export default function RealResultsSection({ config }) {
       filter = 'brightness(90%)'
     } else if (diff === 2) {
       // 3. Far Right Tilted Card (Tighter offset so zero screen clipping)
-      const tx = isMobile ? 70 : 225
-      const ty = isMobile ? 12 : 28
-      const rot = isMobile ? 9.5 : 14
+      const tx = isMobile ? 80 : 240
+      const ty = isMobile ? 14 : 30
+      const rot = isMobile ? 9 : 14
       transform = `translate3d(${tx}px, ${ty}px, -45px) rotate(${rot}deg) scale(0.78)`
       zIndex = 10
       opacity = isMobile ? 0.75 : 0.75
       filter = 'brightness(78%)'
     } else if (diff === videoCards.length - 1) {
       // 4. Inner Left Tilted Card
-      const tx = isMobile ? -36 : -120
-      const ty = isMobile ? 5 : 14
+      const tx = isMobile ? -42 : -130
+      const ty = isMobile ? 6 : 16
       const rot = isMobile ? -5 : -7.5
       transform = `translate3d(${tx}px, ${ty}px, -20px) rotate(${rot}deg) scale(0.9)`
       zIndex = 20
@@ -332,9 +361,9 @@ export default function RealResultsSection({ config }) {
       filter = 'brightness(90%)'
     } else if (diff === videoCards.length - 2) {
       // 5. Far Left Tilted Card (Tighter offset so zero screen clipping)
-      const tx = isMobile ? -70 : -225
-      const ty = isMobile ? 12 : 28
-      const rot = isMobile ? -9.5 : -14
+      const tx = isMobile ? -80 : -240
+      const ty = isMobile ? 14 : 30
+      const rot = isMobile ? -9 : -14
       transform = `translate3d(${tx}px, ${ty}px, -45px) rotate(${rot}deg) scale(0.78)`
       zIndex = 10
       opacity = isMobile ? 0.75 : 0.75
@@ -360,7 +389,6 @@ export default function RealResultsSection({ config }) {
 
   return (
     <section ref={sectionRef} className="py-10 sm:py-24 bg-transparent relative overflow-hidden">
-
       <div className="max-w-7xl mx-auto px-3 sm:px-6 text-center space-y-5 sm:space-y-12 relative z-10">
         
         {/* Section Header */}
@@ -377,9 +405,9 @@ export default function RealResultsSection({ config }) {
           </p>
         </div>
 
-        {/* 5-Card Tilted Fan Stage Container with Touch Swipe (Fits perfectly inside mobile screen) */}
+        {/* 5-Card Tilted Fan Stage Container with Touch Swipe */}
         <div
-          className="relative flex items-center justify-center min-h-[300px] sm:min-h-[480px] max-w-5xl mx-auto px-1 sm:px-2 select-none"
+          className="relative flex items-center justify-center min-h-[340px] sm:min-h-[490px] max-w-5xl mx-auto px-1 sm:px-2 select-none"
           onMouseEnter={() => setIsAutoRotating(false)}
           onMouseLeave={() => setIsAutoRotating(true)}
           onTouchStart={handleTouchStart}
@@ -387,6 +415,7 @@ export default function RealResultsSection({ config }) {
         >
           {/* Desktop Left Arrow Button */}
           <button
+            type="button"
             onClick={prevCard}
             className="hidden sm:flex absolute -left-2 md:-left-4 lg:-left-8 z-40 w-11 h-11 rounded-full bg-white/95 backdrop-blur-md hover:bg-[#5A3859] hover:text-white shadow-xl border border-stone-200 text-stone-800 items-center justify-center transition-all duration-300 transform hover:scale-110 cursor-pointer"
             aria-label="Previous Reel"
@@ -395,20 +424,21 @@ export default function RealResultsSection({ config }) {
           </button>
 
           {/* Perspective Container */}
-          <div className="relative w-full max-w-3xl h-[290px] sm:h-[450px] flex items-center justify-center overflow-visible">
+          <div className="relative w-full max-w-3xl h-[330px] sm:h-[460px] flex items-center justify-center overflow-visible">
             {videoCards.map((card, idx) => {
               const diff = (idx - activeIndex + videoCards.length) % videoCards.length
               const isCenter = diff === 0
               const cardStyle = getCardStyle(idx)
+              const cardCategory = resolveCategory(card)
 
               return (
                 <div
-                  key={card.id}
+                  key={card.id || idx}
                   onClick={() => setActiveIndex(idx)}
                   style={cardStyle}
-                  className={`absolute w-[160px] h-[265px] sm:w-[260px] sm:h-[430px] rounded-[22px] sm:rounded-[30px] overflow-hidden transition-all duration-700 ease-[cubic-bezier(0.25,1,0.5,1)] cursor-pointer bg-black ${
+                  className={`absolute w-[180px] h-[310px] sm:w-[265px] sm:h-[440px] rounded-[24px] sm:rounded-[32px] overflow-hidden transition-all duration-700 ease-[cubic-bezier(0.25,1,0.5,1)] cursor-pointer bg-black ${
                     isCenter
-                      ? 'border-2 border-[#5A3859] shadow-[0_14px_32px_rgba(0,0,0,0.25)]'
+                      ? 'border-2 border-[#5A3859] shadow-[0_16px_36px_rgba(0,0,0,0.35)]'
                       : 'border border-white/20 shadow-lg'
                   }`}
                 >
@@ -424,7 +454,7 @@ export default function RealResultsSection({ config }) {
                             e.stopPropagation()
                             toggleVolume()
                           }}
-                          className="p-1.5 text-white hover:text-amber-300 transition-transform hover:scale-125 cursor-pointer focus:outline-none bg-black/30 backdrop-blur-xs rounded-full"
+                          className="p-1.5 text-white hover:text-amber-300 transition-transform hover:scale-125 cursor-pointer focus:outline-none bg-black/40 backdrop-blur-xs rounded-full"
                           title={isMuted ? 'Unmute Sound' : 'Mute Sound'}
                         >
                           {isMuted ? (
@@ -454,35 +484,41 @@ export default function RealResultsSection({ config }) {
                     ) : (
                       <img
                         src={card.poster}
-                        alt={card.title}
+                        alt={card.title || card.productName}
                         loading="lazy"
                         className="w-full h-full object-cover select-none pointer-events-none"
                       />
                     )}
 
-                    {/* Active Reel Live UI Overlay (Category Name, Product Name, Price & Shop Now) */}
+                    {/* Active Reel Live UI Overlay (Category Badge, Product Name, Price & Shop Now) */}
                     {isCenter && (
-                      <div className="absolute inset-x-0 bottom-0 z-20 p-3 sm:p-4 bg-gradient-to-t from-black/95 via-black/75 to-transparent text-left space-y-1.5 pt-8 sm:pt-12 pointer-events-auto">
-                        {/* Category Name above Product Name */}
-                        {(card.category || card.title || card.tag) && (
-                          <div className="text-[9.5px] sm:text-[10.5px] font-black uppercase tracking-wider text-amber-300 drop-shadow-[0_1px_3px_rgba(0,0,0,0.8)] line-clamp-1">
-                            {card.category || card.title || card.tag}
-                          </div>
-                        )}
+                      <div className="absolute inset-x-0 bottom-0 z-20 p-3 sm:p-4 bg-gradient-to-t from-black/95 via-black/80 to-transparent text-left space-y-1.5 pt-10 sm:pt-14 pointer-events-auto">
+                        {/* Dynamic Category Badge above Product Name */}
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-[9px] sm:text-[10.5px] font-black uppercase tracking-wider text-amber-300 bg-amber-400/15 border border-amber-400/30 px-2 py-0.5 rounded-md drop-shadow-sm backdrop-blur-xs">
+                            {cardCategory}
+                          </span>
+                          {card.rating && (
+                            <span className="text-[9px] sm:text-[10px] font-bold text-white/80 flex items-center gap-0.5">
+                              <Star className="w-2.5 h-2.5 fill-amber-400 text-amber-400" />
+                              <span>{String(card.rating).replace('★', '').trim()}</span>
+                            </span>
+                          )}
+                        </div>
 
                         <h4 className="text-xs sm:text-sm font-bold text-white leading-tight line-clamp-2 drop-shadow-sm">
                           {card.productName}
                         </h4>
 
-                        <div className="flex items-center justify-between pt-0.5">
+                        <div className="flex items-center justify-between gap-2 pt-0.5 sm:pt-1">
                           {card.price && (
-                            <span className="text-xs sm:text-sm font-extrabold text-white drop-shadow-sm font-display">
+                            <span className="text-xs sm:text-base font-extrabold text-white drop-shadow-sm font-display">
                               {card.price}
                             </span>
                           )}
                           <Link
                             to={card.productLink || '/shop'}
-                            className="inline-flex items-center gap-1.5 bg-white text-[#5A3859] hover:bg-stone-100 text-[10px] sm:text-[11px] font-extrabold uppercase px-3 py-1.5 sm:px-3.5 sm:py-1.5 rounded-lg shadow-md transition-all hover:scale-105 cursor-pointer ml-auto"
+                            className="inline-flex items-center gap-1 bg-white text-[#5A3859] hover:bg-stone-100 text-[10px] sm:text-[11px] font-black uppercase px-2.5 py-1.5 sm:px-3.5 sm:py-1.5 rounded-lg shadow-md transition-all hover:scale-105 active:scale-95 cursor-pointer ml-auto shrink-0"
                           >
                             <ShoppingBag className="w-3 h-3 text-[#5A3859]" />
                             <span>SHOP NOW</span>
@@ -493,7 +529,7 @@ export default function RealResultsSection({ config }) {
 
                     {/* Subtle backdrop overlay for side cards */}
                     {!isCenter && (
-                      <div className="absolute inset-0 bg-black/25 backdrop-blur-[0.5px]" />
+                      <div className="absolute inset-0 bg-black/30 backdrop-blur-[0.5px]" />
                     )}
                   </div>
                 </div>
@@ -503,12 +539,28 @@ export default function RealResultsSection({ config }) {
 
           {/* Desktop Right Arrow Button */}
           <button
+            type="button"
             onClick={nextCard}
             className="hidden sm:flex absolute -right-2 md:-right-4 lg:-right-8 z-40 w-11 h-11 rounded-full bg-white/95 backdrop-blur-md hover:bg-[#5A3859] hover:text-white shadow-xl border border-stone-200 text-stone-800 items-center justify-center transition-all duration-300 transform hover:scale-110 cursor-pointer"
             aria-label="Next Reel"
           >
             <ChevronRight className="w-5 h-5" />
           </button>
+        </div>
+
+        {/* Mobile Pagination Indicator Dots */}
+        <div className="flex sm:hidden items-center justify-center gap-1.5 pt-1">
+          {videoCards.map((_, i) => (
+            <button
+              key={i}
+              type="button"
+              onClick={() => setActiveIndex(i)}
+              className={`h-1.5 rounded-full transition-all duration-300 ${
+                i === activeIndex ? 'w-5 bg-[#5A3859]' : 'w-1.5 bg-stone-300'
+              }`}
+              aria-label={`Go to slide ${i + 1}`}
+            />
+          ))}
         </div>
 
         {/* CTA Shop Button */}
