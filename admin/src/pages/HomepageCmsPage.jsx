@@ -290,7 +290,14 @@ export default function HomepageCmsPage() {
   const [updateHomepage, { isLoading: isSaving }] = useUpdateHomepageContentMutation()
   const [resetHomepage, { isLoading: isResetting }] = useResetHomepageContentMutation()
 
-  const storeProducts = productsData?.products || []
+  const rawProducts = Array.isArray(productsData?.data)
+    ? productsData.data
+    : Array.isArray(productsData?.products)
+    ? productsData.products
+    : Array.isArray(productsData)
+    ? productsData
+    : []
+  const storeProducts = rawProducts
 
   const [activeTab, setActiveTab] = useState('visibility')
   const [formData, setFormData] = useState(null)
@@ -1939,37 +1946,13 @@ export default function HomepageCmsPage() {
                     Real People Real Results (3D Video Reels)
                   </h2>
                   <p className="text-xs text-slate-500 mt-1">
-                    Upload vertical MP4 video reels and product preview posters.
+                    નિયત 5 ઇન્ટરેક્ટિવ 3D રીલ્સ સ્લોટ્સ (Select Product, Video File, અને Poster Cover).
                   </p>
                 </div>
-                <button
-                  type="button"
-                  onClick={() => {
-                    const newReel = {
-                      id: `reel-${Date.now()}`,
-                      title: 'Gloss & Shine Routine',
-                      subtitle: 'Transformations with botanical silk',
-                      productName: 'SENSEIN® Shine Hair Serum',
-                      price: '₹1,199',
-                      videoSrc: '/hero-video.mp4',
-                      poster: '/images/hero1.jpg',
-                      productLink: '/shop',
-                      rating: '5.0 ★',
-                      tag: 'TOP RATED',
-                    }
-                    setFormData({
-                      ...formData,
-                      realResults: {
-                        ...formData.realResults,
-                        videoCards: [...(formData.realResults?.videoCards || []), newReel],
-                      },
-                    })
-                  }}
-                  className="px-4 py-2 bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 rounded-xl text-xs font-bold flex items-center gap-1.5 self-start cursor-pointer transition-all shadow-xs"
-                >
-                  <Plus className="h-4 w-4" />
-                  Add Video Reel
-                </button>
+                <div className="px-3.5 py-1.5 bg-blue-50 border border-blue-200 text-blue-800 rounded-xl text-xs font-bold flex items-center gap-1.5 self-start shadow-xs">
+                  <Video className="h-3.5 w-3.5 text-blue-600" />
+                  Fixed 5 Video Reel Slots (ફિક્સ 5 સ્લોટ)
+                </div>
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
@@ -2075,196 +2058,228 @@ export default function HomepageCmsPage() {
               </div>
 
               <div className="space-y-4">
-                {(formData.realResults?.videoCards || []).map((card, index) => {
-                  const updateReelCardField = (field, val) => {
-                    setFormData((prev) => {
-                      const updatedCards = [...(prev.realResults?.videoCards || [])]
-                      updatedCards[index] = {
-                        ...updatedCards[index],
-                        [field]: val,
-                      }
-                      return {
-                        ...prev,
-                        realResults: {
-                          ...(prev.realResults || {}),
-                          videoCards: updatedCards,
-                        },
-                      }
+                {(() => {
+                  const existingCards = [...(formData.realResults?.videoCards || [])]
+                  // Ensure exactly 5 cards
+                  while (existingCards.length < 5) {
+                    const idx = existingCards.length + 1
+                    existingCards.push({
+                      id: `reel-${idx}`,
+                      productName: `Video Reel #${idx}`,
+                      price: '₹999',
+                      videoSrc: '/hero-video.mp4',
+                      poster: `/images/hero${idx > 2 ? 1 : idx}.jpg`,
+                      productLink: '/shop',
+                      rating: '5.0 ★',
+                      category: 'Haircare',
+                      subtitle: 'Experience salon-grade transformations',
+                      tag: 'BESTSELLER',
                     })
                   }
+                  const fixedCards = existingCards.slice(0, 5)
 
-                  return (
-                    <div
-                      key={card.id || index}
-                      className="p-5 bg-white border border-slate-200/90 rounded-2xl space-y-4 shadow-sm"
-                    >
-                      {/* Reel Card Header */}
-                      <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-                        <div className="flex items-center gap-2">
-                          <span className="w-6 h-6 rounded-full bg-blue-600 text-white text-xs font-bold flex items-center justify-center shadow-xs">
-                            {index + 1}
-                          </span>
-                          <span className="text-sm font-bold text-slate-900">
-                            {card.productName || `Video Reel #${index + 1}`}
-                          </span>
-                          {card.price && (
-                            <span className="text-xs font-semibold px-2 py-0.5 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-md">
-                              {card.price}
+                  return fixedCards.map((card, index) => {
+                    const updateReelCardField = (field, val) => {
+                      setFormData((prev) => {
+                        const updatedCards = [...(prev.realResults?.videoCards || [])]
+                        while (updatedCards.length < 5) {
+                          const idx = updatedCards.length + 1
+                          updatedCards.push({
+                            id: `reel-${idx}`,
+                            productName: `Video Reel #${idx}`,
+                            price: '₹999',
+                            videoSrc: '/hero-video.mp4',
+                            poster: `/images/hero${idx > 2 ? 1 : idx}.jpg`,
+                            productLink: '/shop',
+                            rating: '5.0 ★',
+                            category: 'Haircare',
+                            subtitle: 'Experience salon-grade transformations',
+                            tag: 'BESTSELLER',
+                          })
+                        }
+                        const normalizedCards = updatedCards.slice(0, 5)
+                        normalizedCards[index] = {
+                          ...normalizedCards[index],
+                          [field]: val,
+                        }
+                        return {
+                          ...prev,
+                          realResults: {
+                            ...(prev.realResults || {}),
+                            videoCards: normalizedCards,
+                          },
+                        }
+                      })
+                    }
+
+                    return (
+                      <div
+                        key={card.id || index}
+                        className="p-5 bg-white border border-slate-200/90 rounded-2xl space-y-4 shadow-sm"
+                      >
+                        {/* Reel Card Header */}
+                        <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+                          <div className="flex items-center gap-2">
+                            <span className="w-6 h-6 rounded-full bg-blue-600 text-white text-xs font-bold flex items-center justify-center shadow-xs">
+                              {index + 1}
                             </span>
-                          )}
+                            <span className="text-sm font-bold text-slate-900">
+                              {card.productName || `Video Reel Slot #${index + 1}`}
+                            </span>
+                            {card.price && (
+                              <span className="text-xs font-semibold px-2 py-0.5 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-md">
+                                {card.price}
+                              </span>
+                            )}
+                          </div>
+                          <span className="text-xs font-bold text-slate-500 bg-slate-100 px-2.5 py-1 rounded-lg border border-slate-200/60">
+                            Reel Slot #{index + 1} of 5
+                          </span>
                         </div>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            promptDelete(
-                              'Delete Video Reel',
-                              `Are you sure you want to delete video reel "${card.productName || 'Video Reel'}"?`,
-                              () => {
-                                setFormData((prev) => ({
-                                  ...prev,
-                                  realResults: {
-                                    ...prev.realResults,
-                                    videoCards: (prev.realResults?.videoCards || []).filter(
-                                      (_, i) => i !== index
-                                    ),
-                                  },
-                                }))
-                              }
-                            )
-                          }}
-                          className="p-1.5 text-rose-600 hover:text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-200 rounded-lg cursor-pointer transition-colors"
-                          title="Delete Reel"
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </button>
-                      </div>
 
-                      {/* 1. SELECT PRODUCT DROPDOWN */}
-                      <div className="p-4 bg-slate-50 border border-slate-200/80 rounded-xl space-y-2.5">
-                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1">
-                          <label className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
-                            <Package className="h-4 w-4 text-blue-600" />
-                            1. Select Store Product (પ્રોડક્ટ પસંદ કરો)
-                          </label>
-                          <span className="text-[11px] text-slate-500 font-medium">
-                            *પ્રોડક્ટ સિલેક્ટ કરતાં જ નામ, કેટેગરી, પ્રાઇસ અને શોપ લિંક આપોઆપ સેટ થઈ જશે
-                          </span>
-                        </div>
-
-                        <select
-                          value={
-                            storeProducts.find(
-                              (p) =>
-                                p.name === card.productName ||
-                                `/product/${p.slug || p._id}` === card.productLink
-                            )?._id || ''
-                          }
-                          onChange={(e) => {
-                            const selectedId = e.target.value
-                            if (!selectedId) return
-                            const prod = storeProducts.find((p) => p._id === selectedId)
-                            if (prod) {
-                              const catName =
-                                (typeof prod.category === 'object' ? prod.category?.name : prod.category) ||
-                                (prod.name?.toLowerCase().includes('shampoo')
-                                  ? 'Hair Shampoo'
-                                  : prod.name?.toLowerCase().includes('serum') && prod.name?.toLowerCase().includes('scalp')
-                                  ? 'Scalp Serum'
-                                  : prod.name?.toLowerCase().includes('serum')
-                                  ? 'Hair Serum'
-                                  : prod.name?.toLowerCase().includes('mask')
-                                  ? 'Hair Mask'
-                                  : prod.name?.toLowerCase().includes('perfume')
-                                  ? 'Hair Perfume'
-                                  : 'Haircare')
-
-                              const prodPrice = `₹${prod.salePrice || prod.price || 999}`
-                              const prodLink = `/product/${prod.slug || prod._id}`
-                              const prodRating = `${prod.rating || 5.0} ★`
-                              const prodImage = (prod.images && prod.images[0]) || prod.image || ''
-
-                              setFormData((prev) => {
-                                const updatedCards = [...(prev.realResults?.videoCards || [])]
-                                updatedCards[index] = {
-                                  ...updatedCards[index],
-                                  productName: prod.name,
-                                  category: catName,
-                                  price: prodPrice,
-                                  productLink: prodLink,
-                                  rating: prodRating,
-                                  poster: updatedCards[index].poster || prodImage,
-                                  subtitle:
-                                    prod.subtitle ||
-                                    prod.shortDescription ||
-                                    updatedCards[index].subtitle ||
-                                    'Experience salon-grade transformations',
-                                  tag: prod.badge || updatedCards[index].tag || 'BESTSELLER',
-                                }
-                                return {
-                                  ...prev,
-                                  realResults: {
-                                    ...(prev.realResults || {}),
-                                    videoCards: updatedCards,
-                                  },
-                                }
-                              })
-                              showNotification(`Auto-filled details from "${prod.name}"!`)
-                            }
-                          }}
-                          className="w-full bg-white border border-slate-300 text-slate-900 text-xs font-semibold rounded-xl px-3.5 py-2.5 shadow-xs focus:border-blue-600 focus:ring-2 focus:ring-blue-100 focus:outline-none cursor-pointer"
-                        >
-                          <option value="">-- Choose Live Store Product --</option>
-                          {storeProducts.map((p) => (
-                            <option key={p._id} value={p._id}>
-                              {p.name} — ₹{p.salePrice || p.price}
-                            </option>
-                          ))}
-                        </select>
-
-                        {/* Live detected product details pills */}
-                        {card.productName && (
-                          <div className="flex flex-wrap items-center gap-2 pt-1 text-[11px] text-slate-600">
-                            <span className="bg-blue-50 text-blue-700 font-bold px-2.5 py-0.5 rounded-md border border-blue-200/60">
-                              Category: {card.category || 'Haircare'}
-                            </span>
-                            <span className="bg-emerald-50 text-emerald-700 font-bold px-2.5 py-0.5 rounded-md border border-emerald-200/60">
-                              Price: {card.price || '₹999'}
-                            </span>
-                            <span className="bg-amber-50 text-amber-700 font-bold px-2.5 py-0.5 rounded-md border border-amber-200/60">
-                              Rating: {card.rating || '5.0 ★'}
-                            </span>
-                            <span className="bg-slate-100 text-slate-600 font-mono px-2.5 py-0.5 rounded-md border border-slate-200">
-                              Link: {card.productLink || '/shop'}
+                        {/* 1. SELECT PRODUCT DROPDOWN */}
+                        <div className="p-4 bg-slate-50 border border-slate-200/80 rounded-xl space-y-2.5">
+                          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1">
+                            <label className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
+                              <Package className="h-4 w-4 text-blue-600" />
+                              1. Select Store Product (લાઈવ પ્રોડક્ટ પસંદ કરો)
+                            </label>
+                            <span className="text-[11px] text-slate-500 font-medium">
+                              *પ્રોડક્ટ પસંદ કરતાં જ નામ, કેટેગરી, પ્રાઇસ અને શોપ લિંક આપોઆપ સેટ થઈ જશે
                             </span>
                           </div>
-                        )}
-                      </div>
 
-                      {/* 2 & 3. VIDEO FILE & VIDEO COVER */}
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                        <div>
-                          <MediaUploadPicker
-                            label="2. Video Stream File (વીડિયો ફાઇલ - .mp4)"
-                            category="reels"
-                            mediaType="video"
-                            value={card.videoSrc || ''}
-                            onChange={(url) => updateReelCardField('videoSrc', url)}
-                          />
+                          <select
+                            value={
+                              storeProducts.find(
+                                (p) =>
+                                  p.name === card.productName ||
+                                  `/product/${p.slug || p._id}` === card.productLink
+                              )?._id || ''
+                            }
+                            onChange={(e) => {
+                              const selectedId = e.target.value
+                              if (!selectedId) return
+                              const prod = storeProducts.find((p) => p._id === selectedId)
+                              if (prod) {
+                                const catName =
+                                  (typeof prod.category === 'object' ? prod.category?.name : prod.category) ||
+                                  (prod.name?.toLowerCase().includes('shampoo')
+                                    ? 'Hair Shampoo'
+                                    : prod.name?.toLowerCase().includes('serum') && prod.name?.toLowerCase().includes('scalp')
+                                    ? 'Scalp Serum'
+                                    : prod.name?.toLowerCase().includes('serum')
+                                    ? 'Hair Serum'
+                                    : prod.name?.toLowerCase().includes('mask')
+                                    ? 'Hair Mask'
+                                    : prod.name?.toLowerCase().includes('perfume')
+                                    ? 'Hair Perfume'
+                                    : 'Haircare')
+
+                                const prodPrice = `₹${prod.salePrice || prod.price || 999}`
+                                const prodLink = `/product/${prod.slug || prod._id}`
+                                const prodRating = `${prod.rating || 5.0} ★`
+                                const prodImage = (prod.images && prod.images[0]) || prod.image || ''
+
+                                setFormData((prev) => {
+                                  const updatedCards = [...(prev.realResults?.videoCards || [])]
+                                  while (updatedCards.length < 5) {
+                                    const idx = updatedCards.length + 1
+                                    updatedCards.push({
+                                      id: `reel-${idx}`,
+                                      productName: `Video Reel #${idx}`,
+                                      price: '₹999',
+                                      videoSrc: '/hero-video.mp4',
+                                      poster: `/images/hero${idx > 2 ? 1 : idx}.jpg`,
+                                      productLink: '/shop',
+                                      rating: '5.0 ★',
+                                      category: 'Haircare',
+                                      subtitle: 'Experience salon-grade transformations',
+                                      tag: 'BESTSELLER',
+                                    })
+                                  }
+                                  const normalizedCards = updatedCards.slice(0, 5)
+                                  normalizedCards[index] = {
+                                    ...normalizedCards[index],
+                                    productName: prod.name,
+                                    category: catName,
+                                    price: prodPrice,
+                                    productLink: prodLink,
+                                    rating: prodRating,
+                                    poster: normalizedCards[index].poster || prodImage,
+                                    subtitle:
+                                      prod.subtitle ||
+                                      prod.shortDescription ||
+                                      normalizedCards[index].subtitle ||
+                                      'Experience salon-grade transformations',
+                                    tag: prod.badge || normalizedCards[index].tag || 'BESTSELLER',
+                                  }
+                                  return {
+                                    ...prev,
+                                    realResults: {
+                                      ...(prev.realResults || {}),
+                                      videoCards: normalizedCards,
+                                    },
+                                  }
+                                })
+                                showNotification(`Auto-filled details from "${prod.name}"!`)
+                              }
+                            }}
+                            className="w-full bg-white border border-slate-300 text-slate-900 text-xs font-semibold rounded-xl px-3.5 py-2.5 shadow-xs focus:border-blue-600 focus:ring-2 focus:ring-blue-100 focus:outline-none cursor-pointer"
+                          >
+                            <option value="">-- Choose Live Store Product --</option>
+                            {storeProducts.map((p) => (
+                              <option key={p._id} value={p._id}>
+                                {p.name} — ₹{p.salePrice || p.price}
+                              </option>
+                            ))}
+                          </select>
+
+                          {/* Live detected product details pills */}
+                          {card.productName && (
+                            <div className="flex flex-wrap items-center gap-2 pt-1 text-[11px] text-slate-600">
+                              <span className="bg-blue-50 text-blue-700 font-bold px-2.5 py-0.5 rounded-md border border-blue-200/60">
+                                Category: {card.category || 'Haircare'}
+                              </span>
+                              <span className="bg-emerald-50 text-emerald-700 font-bold px-2.5 py-0.5 rounded-md border border-emerald-200/60">
+                                Price: {card.price || '₹999'}
+                              </span>
+                              <span className="bg-amber-50 text-amber-700 font-bold px-2.5 py-0.5 rounded-md border border-amber-200/60">
+                                Rating: {card.rating || '5.0 ★'}
+                              </span>
+                              <span className="bg-slate-100 text-slate-600 font-mono px-2.5 py-0.5 rounded-md border border-slate-200">
+                                Link: {card.productLink || '/shop'}
+                              </span>
+                            </div>
+                          )}
                         </div>
 
-                        <div>
-                          <MediaUploadPicker
-                            label="3. Video Cover / Poster (વીડિયોનું કવર ફોટો)"
-                            category="reels"
-                            mediaType="image"
-                            value={card.poster || ''}
-                            onChange={(url) => updateReelCardField('poster', url)}
-                          />
+                        {/* 2 & 3. VIDEO FILE & VIDEO COVER */}
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                          <div>
+                            <MediaUploadPicker
+                              label="2. Video Stream File (વીડિયો ફાઇલ - .mp4)"
+                              category="reels"
+                              mediaType="video"
+                              value={card.videoSrc || ''}
+                              onChange={(url) => updateReelCardField('videoSrc', url)}
+                            />
+                          </div>
+
+                          <div>
+                            <MediaUploadPicker
+                              label="3. Video Cover / Poster (વીડિયોનું કવર ફોટો)"
+                              category="reels"
+                              mediaType="image"
+                              value={card.poster || ''}
+                              onChange={(url) => updateReelCardField('poster', url)}
+                            />
+                          </div>
                         </div>
                       </div>
-                    </div>
-                  )
-                })}
+                    )
+                  })
+                })()}
               </div>
             </div>
           )}
