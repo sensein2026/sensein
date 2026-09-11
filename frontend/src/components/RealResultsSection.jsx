@@ -548,21 +548,6 @@ export default function RealResultsSection({ config }) {
           </button>
         </div>
 
-        {/* Mobile Pagination Indicator Dots */}
-        <div className="flex sm:hidden items-center justify-center gap-1.5 pt-1">
-          {videoCards.map((_, i) => (
-            <button
-              key={i}
-              type="button"
-              onClick={() => setActiveIndex(i)}
-              className={`h-1.5 rounded-full transition-all duration-300 ${
-                i === activeIndex ? 'w-5 bg-[#5A3859]' : 'w-1.5 bg-stone-300'
-              }`}
-              aria-label={`Go to slide ${i + 1}`}
-            />
-          ))}
-        </div>
-
         {/* CTA Shop Button */}
         <div className="pt-2 sm:pt-4">
           <Link

@@ -4,6 +4,7 @@ import {
   useUpdateHomepageContentMutation,
   useResetHomepageContentMutation,
   useGetAuditLogsQuery,
+  useGetProductsQuery,
 } from '@/features/adminApi'
 import MediaUploadPicker from '@/components/MediaUploadPicker'
 import ConfirmModal from '@/components/ConfirmModal'
@@ -39,6 +40,7 @@ import {
   ArrowRight,
   Eye,
   X,
+  Package,
 } from 'lucide-react'
 
 const DEFAULT_HOMEPAGE_CONFIG = {
@@ -283,9 +285,12 @@ const DEFAULT_HOMEPAGE_CONFIG = {
 
 export default function HomepageCmsPage() {
   const { data: cmsData, isLoading, refetch } = useGetHomepageContentQuery()
+  const { data: productsData } = useGetProductsQuery()
   const { data: auditData, refetch: refetchAudit } = useGetAuditLogsQuery({ entityType: 'HomepageConfig' })
   const [updateHomepage, { isLoading: isSaving }] = useUpdateHomepageContentMutation()
   const [resetHomepage, { isLoading: isResetting }] = useResetHomepageContentMutation()
+
+  const storeProducts = productsData?.products || []
 
   const [activeTab, setActiveTab] = useState('visibility')
   const [formData, setFormData] = useState(null)
@@ -2120,6 +2125,90 @@ export default function HomepageCmsPage() {
                         >
                           <Trash2 className="h-3.5 w-3.5" />
                         </button>
+                      </div>
+
+                      {/* Quick Auto-Fill Product Selector */}
+                      <div className="p-3 bg-gradient-to-r from-blue-50/80 via-indigo-50/60 to-purple-50/80 border border-blue-200/80 rounded-xl flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                        <div className="flex items-center gap-2">
+                          <div className="p-1.5 bg-blue-600 text-white rounded-lg shadow-xs">
+                            <Package className="h-4 w-4" />
+                          </div>
+                          <div>
+                            <span className="text-xs font-bold text-slate-900 block">
+                              Auto-Fill from Live Store Product (લાઈવ પ્રોડક્ટ પસંદ કરો)
+                            </span>
+                            <span className="text-[10px] text-slate-500 block">
+                              પ્રોડક્ટ સિલેક્ટ કરતાં જ Category, Name, Price, Rating અને Shop Link ઓટોમેટિક ભરાઈ જશે.
+                            </span>
+                          </div>
+                        </div>
+
+                        <div className="sm:w-72 shrink-0">
+                          <select
+                            value={
+                              storeProducts.find(
+                                (p) =>
+                                  p.name === card.productName ||
+                                  `/product/${p.slug || p._id}` === card.productLink
+                              )?._id || ''
+                            }
+                            onChange={(e) => {
+                              const selectedId = e.target.value
+                              if (!selectedId) return
+                              const prod = storeProducts.find((p) => p._id === selectedId)
+                              if (prod) {
+                                const catName =
+                                  (typeof prod.category === 'object' ? prod.category?.name : prod.category) ||
+                                  (prod.name?.toLowerCase().includes('shampoo')
+                                    ? 'Hair Shampoo'
+                                    : prod.name?.toLowerCase().includes('serum')
+                                    ? 'Hair Serum'
+                                    : prod.name?.toLowerCase().includes('mask')
+                                    ? 'Hair Mask'
+                                    : 'Haircare')
+
+                                const prodPrice = `₹${prod.salePrice || prod.price || 999}`
+                                const prodLink = `/product/${prod.slug || prod._id}`
+                                const prodRating = `${prod.rating || 5.0} ★`
+                                const prodImage = (prod.images && prod.images[0]) || prod.image || ''
+
+                                setFormData((prev) => {
+                                  const updatedCards = [...(prev.realResults?.videoCards || [])]
+                                  updatedCards[index] = {
+                                    ...updatedCards[index],
+                                    productName: prod.name,
+                                    category: catName,
+                                    price: prodPrice,
+                                    productLink: prodLink,
+                                    rating: prodRating,
+                                    poster: updatedCards[index].poster || prodImage,
+                                    subtitle:
+                                      prod.subtitle ||
+                                      prod.shortDescription ||
+                                      updatedCards[index].subtitle ||
+                                      '',
+                                  }
+                                  return {
+                                    ...prev,
+                                    realResults: {
+                                      ...(prev.realResults || {}),
+                                      videoCards: updatedCards,
+                                    },
+                                  }
+                                })
+                                showNotification(`Auto-filled details from "${prod.name}"!`)
+                              }
+                            }}
+                            className="w-full bg-white border border-blue-300 text-slate-900 text-xs font-bold rounded-xl px-3 py-2 shadow-xs focus:border-blue-600 focus:outline-none cursor-pointer"
+                          >
+                            <option value="">⚡ Choose Live Product to Auto-Fill...</option>
+                            {storeProducts.map((p) => (
+                              <option key={p._id} value={p._id}>
+                                {p.name} — ₹{p.salePrice || p.price}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
                       </div>
 
                       <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
