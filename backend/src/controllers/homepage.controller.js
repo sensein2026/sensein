@@ -261,10 +261,19 @@ export async function updateHomepageConfig(req, res, next) {
     if (changes.length > 0) {
       await AuditLog.create({
         action: 'UPDATE',
+        targetType: 'HomepageConfig',
+        targetId: updated._id.toString(),
         entityType: 'HomepageConfig',
         entityId: updated._id.toString(),
+        actor: req.user?.email || 'admin@sensein.in',
+        actorId: req.user?._id || null,
         title: `Updated Front Page CMS (${changes.length} properties modified/added)`,
         details: {
+          changeCount: changes.length,
+          changes: changes.slice(0, 150),
+          summary: changes.map((c) => `${c.section} -> ${c.categoryOrItem} (${c.property})`).join(', '),
+        },
+        metadata: {
           changeCount: changes.length,
           changes: changes.slice(0, 150),
           summary: changes.map((c) => `${c.section} -> ${c.categoryOrItem} (${c.property})`).join(', '),
@@ -300,8 +309,12 @@ export async function resetHomepageConfig(req, res, next) {
 
     await AuditLog.create({
       action: 'RESET',
+      targetType: 'HomepageConfig',
+      targetId: freshConfig._id.toString(),
       entityType: 'HomepageConfig',
       entityId: freshConfig._id.toString(),
+      actor: req.user?.email || 'admin@sensein.in',
+      actorId: req.user?._id || null,
       title: 'Reset Front Page CMS back to default template',
       performedBy: req.user?._id,
       performerEmail: req.user?.email || 'admin@sensein.in',
